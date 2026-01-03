@@ -5,11 +5,13 @@ const PROMPT: &'static str = "$ ";
 
 fn main() {
 
-    print!("{}", PROMPT);
-    io::stdout().flush().unwrap();
+    loop {
+        print!("{}", PROMPT);
+        io::stdout().flush().unwrap();
 
-    let command = read_command();
-    execute(command);
+        let command = read_command();
+        execute(command);
+    }
 }
 
 fn read_command() -> String {
