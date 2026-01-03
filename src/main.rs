@@ -8,6 +8,9 @@ fn main() {
     loop {
         display_prompt();
         let command = read_command();
+        if (command == "exit") {
+            break
+        }
         execute(command);
     }
 }
@@ -20,9 +23,9 @@ fn display_prompt() {
 fn read_command() -> String {
     let mut cmd = String::new();
     io::stdin().read_line(&mut cmd).unwrap();
-    cmd
+    cmd.as_str().trim().to_string()
 }
 
 fn execute(cmd: String) {
-    println!("{}: command not found", cmd.as_str().trim());
+    println!("{}: command not found", cmd);
 }
