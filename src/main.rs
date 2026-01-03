@@ -6,12 +6,15 @@ const PROMPT: &'static str = "$ ";
 fn main() {
 
     loop {
-        print!("{}", PROMPT);
-        io::stdout().flush().unwrap();
-
+        display_prompt();
         let command = read_command();
         execute(command);
     }
+}
+
+fn display_prompt() {
+    print!("{}", PROMPT);
+    io::stdout().flush().unwrap();
 }
 
 fn read_command() -> String {
