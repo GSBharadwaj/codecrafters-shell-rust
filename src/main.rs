@@ -3,7 +3,7 @@
 use std::io::{self, Write};
 use std::process::{exit, Command};
 use std::{env};
-use std::path::{PathBuf};
+use std::path::{Path, PathBuf};
 use std::os::unix::fs::PermissionsExt;
 
 const PROMPT: &'static str = "$ ";
@@ -13,6 +13,7 @@ enum Builtin {
     Echo,
     Type,
     Pwd,
+    Cd,
 }
 
 fn get_builtin(cmd: &str) -> Option<Builtin> {
@@ -21,6 +22,7 @@ fn get_builtin(cmd: &str) -> Option<Builtin> {
         "echo" => Some(Builtin::Echo),
         "type" => Some(Builtin::Type),
         "pwd" => Some(Builtin::Pwd),
+        "cd" => Some(Builtin::Cd),
         _ => None
     }
 }
@@ -55,6 +57,7 @@ fn get_cmd_args(cmd: &String) -> Vec<&str> {
 }
 
 fn execute(args: Vec<&str>) {
+    if args.is_empty() {return;}
     let builtin_opt = get_builtin(args[0]);
 
     match builtin_opt {
@@ -62,10 +65,32 @@ fn execute(args: Vec<&str>) {
         Some(Builtin::Echo) => execute_echo(args),
         Some(Builtin::Type) => execute_type(args),
         Some(Builtin::Pwd) => execute_pwd(),
+        Some(Builtin::Cd) => execute_cd(args),
         None => match get_cmd_path(args[0]) {
             Some(_) => execute_command(&args),
             None => println!("{}: command not found", args[0])
         }
+    }
+}
+
+fn execute_cd(args: Vec<&str>) {
+    let path = Path::new(&args[1]);
+    match path.canonicalize() {
+        Ok(path_buf) => {
+         let true_path =  path_buf.as_path();
+         if !true_path.exists() {
+             println!("{}: {}: No such file or directory", args[0], args[1])
+         } else if !true_path.is_dir() {
+             println!("{}: {}: Not a directory", args[0], args[1])
+         } else {
+             let cd_result = env::set_current_dir(true_path);
+             match cd_result {
+                 Ok(_) => {}
+                 Err(err) => println!("{}: {}: {}", args[0], args[1], err)
+             }
+         }
+        }
+        Err(_) => println!("cd: {}: No such file or directory", args[1])
     }
 }
 
