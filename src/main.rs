@@ -12,6 +12,7 @@ enum Builtin {
     Exit,
     Echo,
     Type,
+    Pwd,
 }
 
 fn get_builtin(cmd: &str) -> Option<Builtin> {
@@ -19,6 +20,7 @@ fn get_builtin(cmd: &str) -> Option<Builtin> {
         "exit" => Some(Builtin::Exit),
         "echo" => Some(Builtin::Echo),
         "type" => Some(Builtin::Type),
+        "pwd" => Some(Builtin::Pwd),
         _ => None
     }
 }
@@ -59,6 +61,7 @@ fn execute(args: Vec<&str>) {
         Some(Builtin::Exit) => execute_exit(0),
         Some(Builtin::Echo) => execute_echo(args),
         Some(Builtin::Type) => execute_type(args),
+        Some(Builtin::Pwd) => execute_pwd(),
         None => match get_cmd_path(args[0]) {
             Some(_) => execute_command(&args),
             None => println!("{}: command not found", args[0])
@@ -73,7 +76,8 @@ fn execute_exit(code: i32) {
 fn execute_echo(args: Vec<&str>) {
     let n = args.len();
     if n < 2 {
-        panic!("Need at least one argument")
+        println!("Need at least one argument");
+        return;
     }
 
     for i in 1..(n - 1) {
@@ -84,7 +88,8 @@ fn execute_echo(args: Vec<&str>) {
 
 fn execute_type(args: Vec<&str>) {
     if args.len() < 2 {
-        panic!("Need at least one argument")
+        println!("Need at least one argument");
+        return;
     }
 
     let builtin_opt = get_builtin(args[1]);
@@ -94,6 +99,14 @@ fn execute_type(args: Vec<&str>) {
             Some(full_path) =>  println!("{} is {}", &args[1], into_path_str(full_path)),
             None => println!("{}: not found", &args[1]),
         },
+    }
+}
+
+fn execute_pwd() {
+    let res = env::current_dir();
+    match res {
+        Ok(path) => {println!("{}", &into_path_str(path))}
+        Err(_) => {}
     }
 }
 
