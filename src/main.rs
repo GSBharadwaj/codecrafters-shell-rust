@@ -2,7 +2,6 @@
 #[allow(unused_imports)]
 use std::io::{self, Write};
 use std::process::exit;
-use crate::Builtin::{Echo, Exit, Type, INVALID};
 
 const PROMPT: &'static str = "$ ";
 
@@ -10,15 +9,14 @@ enum Builtin {
     Exit,
     Echo,
     Type,
-    INVALID
 }
 
-fn get_builtin(cmd: &str) -> Builtin {
+fn get_builtin(cmd: &str) -> Option<Builtin> {
     match cmd {
-        "exit" => Exit,
-        "echo" => Echo,
-        "type" => Type,
-        _ => INVALID
+        "exit" => Some(Builtin::Exit),
+        "echo" => Some(Builtin::Echo),
+        "type" => Some(Builtin::Type),
+        _ => None
     }
 }
 
@@ -56,10 +54,10 @@ fn execute(args: Vec<&str>) {
     let builtin_opt = get_builtin(args[0]);
 
     match builtin_opt {
-        Exit => execute_exit(0),
-        Echo =>  execute_echo(args),
-        Type =>  execute_type(args),
-        INVALID => print!("{}: command not found", args[0])
+        Some(Builtin::Exit) => execute_exit(0),
+        Some(Builtin::Echo) => execute_echo(args),
+        Some(Builtin::Type) => execute_type(args),
+        None => print!("{}: command not found", args[0])
     }
 }
 
@@ -84,9 +82,9 @@ fn execute_type(args: Vec<&str>) {
         panic!("Need at least one argument")
     }
 
-    let builtin = get_builtin(args[1]);
-    match builtin {
-        INVALID => print!("{}: not found", &args[1]),
+    let builtin_opt = get_builtin(args[1]);
+    match builtin_opt {
+        None => print!("{}: not found", &args[1]),
         _ => print!("{} is a shell builtin", &args[1])
     }
 }
