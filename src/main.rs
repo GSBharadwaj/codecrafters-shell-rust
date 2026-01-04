@@ -1,7 +1,10 @@
+use std::collections::{HashSet};
+
 #[allow(unused_imports)]
 use std::io::{self, Write};
 
 const PROMPT: &'static str = "$ ";
+
 
 fn main() {
 
@@ -38,8 +41,15 @@ fn get_cmd_args(cmd: &String) -> Vec<&str> {
 }
 
 fn execute(args: Vec<&str>) {
+    let mut builtins:HashSet<&str> = HashSet::new();
+
+    builtins.insert("echo");
+    builtins.insert("exit");
+    builtins.insert("type");
+
     match args[0] {
         "echo" =>  execute_echo(args),
+        "type" =>  execute_type(builtins, args),
         _ => print!("{}: command not found", args[0])
     }
 }
@@ -54,4 +64,15 @@ fn execute_echo(args: Vec<&str>) {
         print!("{} ", args[i])
     }
     print!("{}", args[n - 1])
+}
+
+fn execute_type(builtins: HashSet<&str>, args: Vec<&str>) {
+    if args.len() < 2 {
+        panic!("Need at least one argument")
+    }
+    if builtins.contains(args[1]) {
+        print!("{} is a shell builtin", &args[1])
+    } else {
+        print!("{}: not found", &args[1])
+    }
 }
