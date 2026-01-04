@@ -3,7 +3,8 @@
 use std::io::{self, Write};
 use std::process::{exit, Command};
 use std::{env};
-use std::path::{Path, PathBuf};
+use std::path::{PathBuf};
+use std::os::unix::fs::PermissionsExt;
 
 const PROMPT: &'static str = "$ ";
 
@@ -65,15 +66,6 @@ fn execute(args: Vec<&str>) {
     }
 }
 
-fn execute_command(args: &Vec<&str>) {
-    let mut cmd = Command::new(args[0]);
-    for i in 1..args.len() {
-        cmd.arg(args[i]);
-    }
-    let mut child = cmd.spawn().expect("failed to execute child process");
-    child.wait().expect("failed wait on child");
-}
-
 fn execute_exit(code: i32) {
     exit(code)
 }
@@ -105,6 +97,15 @@ fn execute_type(args: Vec<&str>) {
     }
 }
 
+fn execute_command(args: &Vec<&str>) {
+    let mut child = Command::new(args[0])
+        .args(&args[1..])
+        .spawn()
+        .expect("failed to execute child process");
+
+    child.wait().expect("failed wait on child");
+}
+
 fn into_path_str(full_path: PathBuf) -> String {
     full_path.into_os_string().into_string().unwrap()
 }
@@ -121,13 +122,8 @@ fn get_cmd_path(cmd: &str) -> Option<PathBuf> {
 }
 
 fn is_executable(path_buf: &PathBuf) -> bool {
-    let metadata_res = path_buf.metadata();
-    if !metadata_res.is_ok() {
-        false
-    } else {
-        use std::os::unix::fs::PermissionsExt;
-
-        let metadata = metadata_res.unwrap();
-        metadata.is_file() && metadata.permissions().mode() & 0o111 != 0
+    match path_buf.metadata() {
+        Ok(metadata) => metadata.is_file() && metadata.permissions().mode() & 0o111 != 0,
+        Err(_) => false
     }
 }
