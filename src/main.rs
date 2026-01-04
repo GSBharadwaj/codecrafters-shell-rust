@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::os::unix::fs::PermissionsExt;
 
 const PROMPT: &'static str = "$ ";
+const TILDE: &'static str = "~";
 
 enum Builtin {
     Exit,
@@ -79,8 +80,14 @@ fn execute_cd(args: Vec<&str>) {
         return;
     }
 
-    let path = Path::new(&args[1]);
-    match path.canonicalize() {
+    let tilde_replaced_path_res = tilde_replaced_path(&args[1]);
+    if tilde_replaced_path_res.is_none() {
+        println!("No home directory set");
+        return;
+    }
+
+    let path = tilde_replaced_path_res.unwrap();
+    match path.as_path().canonicalize() {
         Ok(path_buf) => {
             let true_path = path_buf.as_path();
             if !true_path.exists() {
@@ -97,6 +104,19 @@ fn execute_cd(args: Vec<&str>) {
         }
         Err(_) => println!("cd: {}: No such file or directory", args[1])
     }
+}
+
+fn tilde_replaced_path(path_str: &str) -> Option<PathBuf> {
+    if path_str.contains(TILDE) {
+        return match env::home_dir() {
+            None => None,
+            Some(dir) => {
+                let paths = path_str.replace(TILDE, into_path_str(dir).as_str());
+                Some(Path::new(paths.as_str()).to_path_buf())
+            }
+        }
+    }
+    Some(Path::new(path_str).to_path_buf())
 }
 
 fn execute_exit(code: i32) {
