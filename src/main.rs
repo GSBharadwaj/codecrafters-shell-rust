@@ -1,12 +1,26 @@
-use std::alloc::System;
-use std::collections::{HashSet};
 
 #[allow(unused_imports)]
 use std::io::{self, Write};
 use std::process::exit;
+use crate::Builtin::{Echo, Exit, Type, INVALID};
 
 const PROMPT: &'static str = "$ ";
 
+enum Builtin {
+    Exit,
+    Echo,
+    Type,
+    INVALID
+}
+
+fn get_builtin(cmd: &str) -> Builtin {
+    match cmd {
+        "exit" => Exit,
+        "echo" => Echo,
+        "type" => Type,
+        _ => INVALID
+    }
+}
 
 fn main() {
 
@@ -39,18 +53,13 @@ fn get_cmd_args(cmd: &String) -> Vec<&str> {
 }
 
 fn execute(args: Vec<&str>) {
+    let builtin_opt = get_builtin(args[0]);
 
-    let mut builtins:HashSet<&str> = HashSet::new();
-
-    builtins.insert("echo");
-    builtins.insert("exit");
-    builtins.insert("type");
-
-    match args[0] {
-        "echo" =>  execute_echo(args),
-        "type" =>  execute_type(builtins, args),
-        "exit" => execute_exit(0),
-        _ => print!("{}: command not found", args[0])
+    match builtin_opt {
+        Exit => execute_exit(0),
+        Echo =>  execute_echo(args),
+        Type =>  execute_type(args),
+        INVALID => print!("{}: command not found", args[0])
     }
 }
 
@@ -70,13 +79,14 @@ fn execute_echo(args: Vec<&str>) {
     print!("{}", args[n - 1])
 }
 
-fn execute_type(builtins: HashSet<&str>, args: Vec<&str>) {
+fn execute_type(args: Vec<&str>) {
     if args.len() < 2 {
         panic!("Need at least one argument")
     }
-    if builtins.contains(args[1]) {
-        print!("{} is a shell builtin", &args[1])
-    } else {
-        print!("{}: not found", &args[1])
+
+    let builtin = get_builtin(args[1]);
+    match builtin {
+        INVALID => print!("{}: not found", &args[1]),
+        _ => print!("{} is a shell builtin", &args[1])
     }
 }
