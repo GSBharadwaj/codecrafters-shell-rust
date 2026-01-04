@@ -100,32 +100,18 @@ fn execute_type(args: Vec<&str>) {
 }
 
 fn get_cmd_directory(cmd: &str) -> Option<PathBuf> {
-    match env::var_os("PATH") {
-        Some(paths) => {
-            for path in env::split_paths(&paths) {
-                if !path.as_path().is_dir() {
-                    continue
-                }
-
-                let entries = std::fs::read_dir(path.as_path()).unwrap();
-                for entry in entries {
-                    if let Ok(entry) = entry {
-                        let file_name = entry.file_name();
-                        if is_executable(entry.path()) && file_name == cmd {
-                            return Some(entry.path());
-                        }
-                    }
-                }
-            }
-            None
+    let paths = env::var_os("PATH")?;
+    for dir in env::split_paths(&paths) {
+        let full_path = dir.as_path().join(cmd);
+        if is_executable(&full_path) {
+            return Some(full_path)
         }
-        None => None
     }
+    None
 }
 
-#[cfg(unix)]
-fn is_executable(path_buf: PathBuf) -> bool {
-    let metadata_res = path_buf.as_path().metadata();
+fn is_executable(path_buf: &PathBuf) -> bool {
+    let metadata_res = path_buf.metadata();
     if !metadata_res.is_ok() {
         false
     } else {
@@ -133,17 +119,5 @@ fn is_executable(path_buf: PathBuf) -> bool {
 
         let metadata = metadata_res.unwrap();
         metadata.is_file() && metadata.permissions().mode() & 0o111 != 0
-    }
-}
-
-#[cfg(windows)]
-fn is_executable(path_buf: PathBuf) -> bool {
-    match path_buf.as_path().extension() {
-        None => false,
-        Some(ex) => match ex.to_ascii_lowercase().into_string().unwrap().as_str()
-        {
-            "exe" | "cmd" | "bat" | "com" => { true }
-            | _ => false
-        }
     }
 }
