@@ -1,9 +1,9 @@
 
 #[allow(unused_imports)]
 use std::io::{self, Write};
-use std::process::exit;
+use std::process::{exit, Command};
 use std::{env};
-use std::path::{PathBuf};
+use std::path::{Path, PathBuf};
 
 const PROMPT: &'static str = "$ ";
 
@@ -29,7 +29,6 @@ fn main() {
         let command = read_command();
         let args = get_cmd_args(&command);
         execute(args);
-        println!()
     }
 }
 
@@ -59,8 +58,20 @@ fn execute(args: Vec<&str>) {
         Some(Builtin::Exit) => execute_exit(0),
         Some(Builtin::Echo) => execute_echo(args),
         Some(Builtin::Type) => execute_type(args),
-        None => print!("{}: command not found", args[0])
+        None => match get_cmd_path(args[0]) {
+            Some(_) => execute_command(&args),
+            None => println!("{}: command not found", args[0])
+        }
     }
+}
+
+fn execute_command(args: &Vec<&str>) {
+    let mut cmd = Command::new(args[0]);
+    for i in 1..args.len() {
+        cmd.arg(args[i]);
+    }
+    let mut child = cmd.spawn().expect("failed to execute child process");
+    child.wait().expect("failed wait on child");
 }
 
 fn execute_exit(code: i32) {
@@ -76,7 +87,7 @@ fn execute_echo(args: Vec<&str>) {
     for i in 1..(n - 1) {
         print!("{} ", args[i])
     }
-    print!("{}", args[n - 1])
+    println!("{}", args[n - 1])
 }
 
 fn execute_type(args: Vec<&str>) {
@@ -86,20 +97,19 @@ fn execute_type(args: Vec<&str>) {
 
     let builtin_opt = get_builtin(args[1]);
     match builtin_opt {
-        Some(_) => print!("{} is a shell builtin", &args[1]),
-        _ => {
-            let cmd_root = get_cmd_directory(args[1]);
-            match cmd_root {
-                None => print!("{}: not found", &args[1]),
-                Some(full_path) => {
-                    print!("{} is {}", &args[1], &(full_path.into_os_string().into_string().unwrap()))
-                }
-            }
-        }
+        Some(_) => println!("{} is a shell builtin", &args[1]),
+        _ => match get_cmd_path(args[1]) {
+            Some(full_path) =>  println!("{} is {}", &args[1], into_path_str(full_path)),
+            None => println!("{}: not found", &args[1]),
+        },
     }
 }
 
-fn get_cmd_directory(cmd: &str) -> Option<PathBuf> {
+fn into_path_str(full_path: PathBuf) -> String {
+    full_path.into_os_string().into_string().unwrap()
+}
+
+fn get_cmd_path(cmd: &str) -> Option<PathBuf> {
     let paths = env::var_os("PATH")?;
     for dir in env::split_paths(&paths) {
         let full_path = dir.as_path().join(cmd);
