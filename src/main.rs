@@ -1,7 +1,9 @@
+use std::alloc::System;
 use std::collections::{HashSet};
 
 #[allow(unused_imports)]
 use std::io::{self, Write};
+use std::process::exit;
 
 const PROMPT: &'static str = "$ ";
 
@@ -12,10 +14,6 @@ fn main() {
         display_prompt();
         let command = read_command();
         let args = get_cmd_args(&command);
-        if args[0] == "exit" {
-            break
-        }
-
         execute(args);
         println!()
     }
@@ -41,6 +39,7 @@ fn get_cmd_args(cmd: &String) -> Vec<&str> {
 }
 
 fn execute(args: Vec<&str>) {
+
     let mut builtins:HashSet<&str> = HashSet::new();
 
     builtins.insert("echo");
@@ -50,8 +49,13 @@ fn execute(args: Vec<&str>) {
     match args[0] {
         "echo" =>  execute_echo(args),
         "type" =>  execute_type(builtins, args),
+        "exit" => execute_exit(0),
         _ => print!("{}: command not found", args[0])
     }
+}
+
+fn execute_exit(code: i32) {
+    exit(code)
 }
 
 fn execute_echo(args: Vec<&str>) {
