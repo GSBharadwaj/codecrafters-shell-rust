@@ -74,21 +74,26 @@ fn execute(args: Vec<&str>) {
 }
 
 fn execute_cd(args: Vec<&str>) {
+    if args.len() != 2 {
+        println!("Usage: cd <directory>");
+        return;
+    }
+
     let path = Path::new(&args[1]);
     match path.canonicalize() {
         Ok(path_buf) => {
-         let true_path =  path_buf.as_path();
-         if !true_path.exists() {
-             println!("{}: {}: No such file or directory", args[0], args[1])
-         } else if !true_path.is_dir() {
-             println!("{}: {}: Not a directory", args[0], args[1])
-         } else {
-             let cd_result = env::set_current_dir(true_path);
-             match cd_result {
-                 Ok(_) => {}
-                 Err(err) => println!("{}: {}: {}", args[0], args[1], err)
-             }
-         }
+            let true_path = path_buf.as_path();
+            if !true_path.exists() {
+                println!("{}: {}: No such file or directory", args[0], args[1])
+            } else if !true_path.is_dir() {
+                println!("{}: {}: Not a directory", args[0], args[1])
+            } else {
+                let cd_result = env::set_current_dir(true_path);
+                match cd_result {
+                    Ok(_) => {}
+                    Err(_) => println!("{}: {}: No such file or director", args[0], args[1])
+                }
+            }
         }
         Err(_) => println!("cd: {}: No such file or directory", args[1])
     }
