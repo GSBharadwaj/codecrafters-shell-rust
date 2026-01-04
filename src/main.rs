@@ -2,6 +2,8 @@
 #[allow(unused_imports)]
 use std::io::{self, Write};
 use std::process::exit;
+use std::{env};
+use std::path::{PathBuf};
 
 const PROMPT: &'static str = "$ ";
 
@@ -84,7 +86,64 @@ fn execute_type(args: Vec<&str>) {
 
     let builtin_opt = get_builtin(args[1]);
     match builtin_opt {
-        None => print!("{}: not found", &args[1]),
-        _ => print!("{} is a shell builtin", &args[1])
+        Some(_) => print!("{} is a shell builtin", &args[1]),
+        _ => {
+            let cmd_root = get_cmd_directory(args[1]);
+            match cmd_root {
+                None => print!("{}: not found", &args[1]),
+                Some(full_path) => {
+                    print!("{} is {}", &args[1], &(full_path.into_os_string().into_string().unwrap()))
+                }
+            }
+        }
+    }
+}
+
+fn get_cmd_directory(cmd: &str) -> Option<PathBuf> {
+    match env::var_os("PATH") {
+        Some(paths) => {
+            for path in env::split_paths(&paths) {
+                if !path.as_path().is_dir() {
+                    continue
+                }
+
+                let entries = std::fs::read_dir(path.as_path()).unwrap();
+                for entry in entries {
+                    if let Ok(entry) = entry {
+                        let file_name = entry.file_name();
+                        if is_executable(entry.path()) && file_name == cmd {
+                            return Some(entry.path());
+                        }
+                    }
+                }
+            }
+            None
+        }
+        None => None
+    }
+}
+
+#[cfg(unix)]
+fn is_executable(path_buf: PathBuf) -> bool {
+    let metadata_res = path_buf.as_path().metadata();
+    if !metadata_res.is_ok() {
+        false
+    } else {
+        use std::os::unix::fs::PermissionsExt;
+
+        let metadata = metadata_res.unwrap();
+        metadata.is_file() && metadata.permissions().mode() & 0o111 != 0
+    }
+}
+
+#[cfg(windows)]
+fn is_executable(path_buf: PathBuf) -> bool {
+    match path_buf.as_path().extension() {
+        None => false,
+        Some(ex) => match ex.to_ascii_lowercase().into_string().unwrap().as_str()
+        {
+            "exe" | "cmd" | "bat" | "com" => { true }
+            | _ => false
+        }
     }
 }
