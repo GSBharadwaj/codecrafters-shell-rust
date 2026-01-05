@@ -1,3 +1,4 @@
+mod input_parser;
 
 #[allow(unused_imports)]
 use std::io::{self, Write};
@@ -17,8 +18,8 @@ enum Builtin {
     Cd,
 }
 
-fn get_builtin(cmd: &str) -> Option<Builtin> {
-    match cmd {
+fn get_builtin(cmd: &String) -> Option<Builtin> {
+    match cmd.as_str() {
         "exit" => Some(Builtin::Exit),
         "echo" => Some(Builtin::Echo),
         "type" => Some(Builtin::Type),
@@ -32,9 +33,9 @@ fn main() {
 
     loop {
         display_prompt();
-        let command = read_command();
-        let args = get_cmd_args(&command);
-        execute(args);
+        let input = read_input();
+        let args = get_cmd_args(&input);
+        execute(&args);
     }
 }
 
@@ -43,23 +44,20 @@ fn display_prompt() {
     io::stdout().flush().unwrap();
 }
 
-fn read_command() -> String {
+fn read_input() -> String {
     let mut cmd = String::new();
     io::stdin().read_line(&mut cmd).unwrap();
 
     cmd
 }
 
-fn get_cmd_args(cmd: &String) -> Vec<&str> {
-    cmd.as_str().split_whitespace()
-        .into_iter()
-        .map(str::trim)
-        .collect()
+fn get_cmd_args(input: &String) -> Vec<String> {
+    input_parser::parse(input)
 }
 
-fn execute(args: Vec<&str>) {
+fn execute(args: &Vec<String>) {
     if args.is_empty() {return;}
-    let builtin_opt = get_builtin(args[0]);
+    let builtin_opt = get_builtin(&args[0]);
 
     match builtin_opt {
         Some(Builtin::Exit) => execute_exit(0),
@@ -67,14 +65,14 @@ fn execute(args: Vec<&str>) {
         Some(Builtin::Type) => execute_type(args),
         Some(Builtin::Pwd) => execute_pwd(),
         Some(Builtin::Cd) => execute_cd(args),
-        None => match get_cmd_path(args[0]) {
+        None => match get_cmd_path(&args[0]) {
             Some(_) => execute_command(&args),
             None => println!("{}: command not found", args[0])
         }
     }
 }
 
-fn execute_cd(args: Vec<&str>) {
+fn execute_cd(args: &Vec<String>) {
     if args.len() != 2 {
         println!("Usage: cd <directory>");
         return;
@@ -123,7 +121,7 @@ fn execute_exit(code: i32) {
     exit(code)
 }
 
-fn execute_echo(args: Vec<&str>) {
+fn execute_echo(args: &Vec<String>) {
     let n = args.len();
     if n < 2 {
         println!("Need at least one argument");
@@ -136,16 +134,16 @@ fn execute_echo(args: Vec<&str>) {
     println!("{}", args[n - 1])
 }
 
-fn execute_type(args: Vec<&str>) {
+fn execute_type(args: &Vec<String>) {
     if args.len() < 2 {
         println!("Need at least one argument");
         return;
     }
 
-    let builtin_opt = get_builtin(args[1]);
+    let builtin_opt = get_builtin(&args[1]);
     match builtin_opt {
         Some(_) => println!("{} is a shell builtin", &args[1]),
-        _ => match get_cmd_path(args[1]) {
+        _ => match get_cmd_path(&args[1]) {
             Some(full_path) =>  println!("{} is {}", &args[1], into_path_str(full_path)),
             None => println!("{}: not found", &args[1]),
         },
@@ -160,8 +158,8 @@ fn execute_pwd() {
     }
 }
 
-fn execute_command(args: &Vec<&str>) {
-    let mut child = Command::new(args[0])
+fn execute_command(args: &Vec<String>) {
+    let mut child = Command::new(&args[0])
         .args(&args[1..])
         .spawn()
         .expect("failed to execute child process");
