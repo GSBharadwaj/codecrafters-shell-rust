@@ -24,6 +24,9 @@ pub fn parse(input: &str) -> Vec<String> {
     while char_peek.peek().is_some() {
         match char_peek.next() {
             Some(x) => {
+                if x == '\n' {
+                    continue
+                }
                 if x.is_whitespace() {
                     match state {
                         Plain => {
@@ -76,6 +79,16 @@ pub fn parse(input: &str) -> Vec<String> {
             None => break
         }
     }
+    if !token_buffer.is_empty() {
+        match state {
+            Plain | SingleQuote => {
+                add_token(&mut tokens, token_buffer.as_str(), state);
+                token_buffer.clear()
+            }
+            _ => {}
+        }
+    }
+
     let res = tokens_to_strings(&tokens);
     res
 }
