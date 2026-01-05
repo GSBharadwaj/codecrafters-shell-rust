@@ -1,9 +1,11 @@
-use crate::input_parser::TokenType::{Default, Plain};
+use crate::input_parser::TokenType::{WhiteSpace, Plain, SingleQuote, Default};
 
 #[derive(PartialEq)]
 enum TokenType {
     Default,
+    WhiteSpace,
     Plain,
+    SingleQuote,
 }
 
 struct Token {
@@ -27,30 +29,86 @@ pub fn parse(input: &str) -> Vec<String> {
                         Plain => {
                             add_token(&mut tokens, token_buffer.as_str(), Plain);
                             token_buffer.clear();
-                            state = Default;
+                            state = WhiteSpace;
                         }
-                        Default => continue
+                        SingleQuote => {
+                            token_buffer.push(x)
+                        }
+                        Default => { state = WhiteSpace }
+                        WhiteSpace => continue
+                    }
+                } else if is_single_quote(&x) {
+                    match state {
+                        WhiteSpace => {
+                            add_token(&mut tokens, "", WhiteSpace);
+                            token_buffer.clear();
+                            state = SingleQuote;
+                        }
+                        Plain => {
+                            add_token(&mut tokens, token_buffer.as_str(), Plain);
+                            token_buffer.clear();
+                            state = SingleQuote
+                        },
+                        SingleQuote => {
+                            add_token(&mut tokens, token_buffer.as_str(), SingleQuote);
+                            token_buffer.clear();
+                            state = Default
+                        }
+                        Default => {
+                            state = SingleQuote
+                        },
                     }
                 } else {
-                    state = Plain;
-                    token_buffer.push(x)
+                    match state {
+                        WhiteSpace => {
+                            add_token(&mut tokens, "", WhiteSpace);
+                            token_buffer.push(x);
+                            state = Plain
+                        }
+                        Default => {
+                            token_buffer.push(x);
+                            state=Plain
+                        }
+                        _ => {token_buffer.push(x)}
+                    }
                 }
             }
             None => break
         }
     }
     let res = tokens_to_strings(&tokens);
-    if res.is_empty() {
-        let mut new_res = Vec::new();
-        new_res.push("pwd".to_string());
-       new_res
-    } else {
-        res
-    }
+    res
+}
+
+fn is_single_quote(x: &char) -> bool {
+    *x == '\''
 }
 
 fn tokens_to_strings(tokens: &Vec<Token>) -> Vec<String> {
-    tokens.into_iter().filter(|t| match t.token_type {Default => false, _ => true}).map(|t| t.value.clone()).collect()
+    let mut buffer = String::new();
+    let mut result = Vec::new();
+
+    for i in 0..tokens.len() {
+        match tokens[i].token_type {
+            WhiteSpace => {
+                if !buffer.is_empty() {
+                    result.push(buffer.as_str().to_string());
+                    buffer.clear();
+                }
+            }
+            Plain => {
+                buffer.push_str(tokens[i].value.as_str());
+            }
+            SingleQuote => {
+                buffer.push_str(tokens[i].value.as_str());
+            }
+            Default => continue
+        }
+    }
+    if !buffer.is_empty() {
+        result.push(buffer.as_str().to_string());
+    }
+    result
 }
 
 fn add_token(res: &mut Vec<Token>, token_string: &str, token_type: TokenType) {
