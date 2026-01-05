@@ -34,7 +34,7 @@ fn main() {
     loop {
         display_prompt();
         let input = read_input();
-        let args = get_cmd_args(&input);
+        let args = get_cmd_args(input.as_str());
         execute(&args);
     }
 }
@@ -51,7 +51,7 @@ fn read_input() -> String {
     cmd
 }
 
-fn get_cmd_args(input: &String) -> Vec<String> {
+fn get_cmd_args(input: &str) -> Vec<String> {
     input_parser::parse(input)
 }
 
