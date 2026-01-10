@@ -23,98 +23,88 @@ pub fn parse(input: &str) -> Vec<String> {
     let mut token_buffer = String::new();
 
     while char_peek.peek().is_some() {
-        match char_peek.next() {
-            Some(x) => {
-                if x == '\n' {
-                    continue
-                }
+        let x =
+        match char_peek.next()  {
+            Some(y) => y,
+            None => break
+        };
+
+        if x == '\n' {
+            continue
+        }
+        match state {
+            Default => {
                 if x.is_whitespace() {
-                    match state {
-                        Plain => {
-                            add_token(&mut tokens, token_buffer.as_str(), Plain);
-                            token_buffer.clear();
-                            state = WhiteSpace;
-                        }
-                        DoubleQuote => {
-                            token_buffer.push(x)
-                        }
-                        SingleQuote => {
-                            token_buffer.push(x)
-                        }
-                        Default => { state = WhiteSpace }
-                        WhiteSpace => continue
-                    }
+                    state = WhiteSpace
                 } else if is_single_quote(&x) {
-                    match state {
-                        WhiteSpace => {
-                            add_token(&mut tokens, "", WhiteSpace);
-                            token_buffer.clear();
-                            state = SingleQuote;
-                        }
-                        Plain => {
-                            add_token(&mut tokens, token_buffer.as_str(), Plain);
-                            token_buffer.clear();
-                            state = SingleQuote
-                        },
-                        DoubleQuote => {
-                            token_buffer.push(x);
-                        }
-                        SingleQuote => {
-                            add_token(&mut tokens, token_buffer.as_str(), SingleQuote);
-                            token_buffer.clear();
-                            state = Default
-                        }
-                        Default => {
-                            state = SingleQuote
-                        },
-                    }
+                    state = SingleQuote
                 } else if is_double_quote(&x) {
-                    match state {
-                        Default => {
-                            state = DoubleQuote
-                        }
-                        WhiteSpace => {
-                            add_token(&mut tokens, "", WhiteSpace);
-                            token_buffer.clear();
-                            state = DoubleQuote
-                        }
-                        Plain => {
-                            add_token(&mut tokens, token_buffer.as_str(), Plain);
-                            token_buffer.clear();
-                            state = DoubleQuote;
-                        }
-                        SingleQuote => {
-                            token_buffer.push(x);
-                        }
-                        DoubleQuote => {
-                            add_token(&mut tokens, token_buffer.as_str(), DoubleQuote);
-                            token_buffer.clear();
-                            state = Default
-                        }
-                    }
-                }
-                else {
-                    match state {
-                        WhiteSpace => {
-                            add_token(&mut tokens, "", WhiteSpace);
-                            token_buffer.push(x);
-                            state = Plain
-                        }
-                        Default => {
-                            token_buffer.push(x);
-                            state=Plain
-                        }
-                        _ => {token_buffer.push(x)}
-                    }
+                    state = DoubleQuote
+                } else {
+                    state = Plain;
+                    token_buffer.push(x)
                 }
             }
-            None => break
+            WhiteSpace => {
+                if x.is_whitespace() {
+                    continue;
+                } else if is_single_quote(&x) {
+                    tokens.push(create_token("", WhiteSpace));
+                    token_buffer.clear();
+                    state = SingleQuote
+                } else if is_double_quote(&x) {
+                    tokens.push(create_token("", WhiteSpace));
+                    token_buffer.clear();
+                    state = DoubleQuote
+                } else {
+                    tokens.push(create_token("", WhiteSpace));
+                    token_buffer.clear();
+                    state = Plain;
+
+                    token_buffer.push(x);
+                }
+            }
+            Plain => {
+                if x.is_whitespace() {
+                    tokens.push(create_token(token_buffer.as_str(), Plain));
+                    token_buffer.clear();
+                    state = WhiteSpace
+                } else if is_single_quote(&x) {
+                    tokens.push(create_token(token_buffer.as_str(), Plain));
+                    token_buffer.clear();
+                    state = SingleQuote
+                } else if is_double_quote(&x) {
+                    tokens.push(create_token(token_buffer.as_str(), Plain));
+                    token_buffer.clear();
+                    state = DoubleQuote
+                } else {
+                    token_buffer.push(x)
+                }
+            }
+            SingleQuote => {
+                if is_single_quote(&x) {
+                    tokens.push(create_token(token_buffer.as_str(), SingleQuote));
+                    token_buffer.clear();
+                    state = Default
+                } else {
+                    token_buffer.push(x)
+                }
+            }
+            DoubleQuote => {
+                if is_double_quote(&x) {
+                    tokens.push(create_token(token_buffer.as_str(), DoubleQuote));
+                    token_buffer.clear();
+                    state = Default
+                } else {
+                    token_buffer.push(x)
+                }
+            }
         }
     }
     if !token_buffer.is_empty() {
         match state {
             Plain | SingleQuote => {
-                add_token(&mut tokens, token_buffer.as_str(), state);
+                tokens.push(create_token(token_buffer.as_str(), state));
                 token_buffer.clear()
             }
             _ => {}
@@ -127,6 +117,10 @@ pub fn parse(input: &str) -> Vec<String> {
 
 fn is_single_quote(x: &char) -> bool {
     *x == '\''
+}
+
+fn is_backslash(x: &char) -> bool {
+    *x == '\\'
 }
 
 fn is_double_quote(x: &char) -> bool {
@@ -163,11 +157,9 @@ fn tokens_to_strings(tokens: &Vec<Token>) -> Vec<String> {
     result
 }
 
-fn add_token(res: &mut Vec<Token>, token_string: &str, token_type: TokenType) {
-    let token = Token {
+fn create_token(token_string: &str, token_type: TokenType) -> Token {
+    Token {
         value: token_string.to_string(),
         token_type
-    };
-
-    res.push(token);
+    }
 }
