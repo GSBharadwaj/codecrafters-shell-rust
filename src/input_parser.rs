@@ -1,12 +1,19 @@
-use crate::input_parser::TokenType::{WhiteSpace, Plain, SingleQuote, Default, DoubleQuote};
+use crate::input_parser::State::{Space, Plain, SingleQuote, Default, DoubleQuote, Escape};
+use crate::input_parser::TokenType::{WhiteSpace, Str};
 
-#[derive(PartialEq)]
-enum TokenType {
+enum State {
     Default,
-    WhiteSpace,
+    Space,
     Plain,
     SingleQuote,
     DoubleQuote,
+    Escape,
+}
+
+#[derive(PartialEq)]
+enum TokenType {
+    WhiteSpace,
+    Str,
 }
 
 struct Token {
@@ -18,7 +25,7 @@ struct Token {
 pub fn parse(input: &str) -> Vec<String> {
     let mut char_peek = input.chars().peekable();
 
-    let mut state: TokenType = Default;
+    let mut state: State = Default;
     let mut tokens = Vec::new();
     let mut token_buffer = String::new();
 
@@ -35,29 +42,35 @@ pub fn parse(input: &str) -> Vec<String> {
         match state {
             Default => {
                 if x.is_whitespace() {
-                    state = WhiteSpace
+                    state = Space
                 } else if is_single_quote(&x) {
                     state = SingleQuote
                 } else if is_double_quote(&x) {
                     state = DoubleQuote
+                } else if is_backslash(&x) {
+                    state = Escape;
                 } else {
                     state = Plain;
                     token_buffer.push(x)
                 }
             }
-            WhiteSpace => {
+            Space => {
                 if x.is_whitespace() {
                     continue;
                 } else if is_single_quote(&x) {
-                    tokens.push(create_token("", WhiteSpace));
+                    tokens.push(whitespace_token());
                     token_buffer.clear();
                     state = SingleQuote
                 } else if is_double_quote(&x) {
-                    tokens.push(create_token("", WhiteSpace));
+                    tokens.push(whitespace_token());
                     token_buffer.clear();
                     state = DoubleQuote
+                } else if is_backslash(&x) {
+                    tokens.push(whitespace_token());
+                    token_buffer.clear();
+                    state = Escape;
                 } else {
-                    tokens.push(create_token("", WhiteSpace));
+                    tokens.push(whitespace_token());
                     token_buffer.clear();
                     state = Plain;
 
@@ -66,24 +79,26 @@ pub fn parse(input: &str) -> Vec<String> {
             }
             Plain => {
                 if x.is_whitespace() {
-                    tokens.push(create_token(token_buffer.as_str(), Plain));
+                    tokens.push(create_token(token_buffer.as_str()));
                     token_buffer.clear();
-                    state = WhiteSpace
+                    state = Space
                 } else if is_single_quote(&x) {
-                    tokens.push(create_token(token_buffer.as_str(), Plain));
+                    tokens.push(create_token(token_buffer.as_str()));
                     token_buffer.clear();
                     state = SingleQuote
                 } else if is_double_quote(&x) {
-                    tokens.push(create_token(token_buffer.as_str(), Plain));
+                    tokens.push(create_token(token_buffer.as_str()));
                     token_buffer.clear();
                     state = DoubleQuote
+                } else if is_backslash(&x) {
+                    state = Escape
                 } else {
                     token_buffer.push(x)
                 }
             }
             SingleQuote => {
                 if is_single_quote(&x) {
-                    tokens.push(create_token(token_buffer.as_str(), SingleQuote));
+                    tokens.push(create_token(token_buffer.as_str()));
                     token_buffer.clear();
                     state = Default
                 } else {
@@ -92,22 +107,26 @@ pub fn parse(input: &str) -> Vec<String> {
             }
             DoubleQuote => {
                 if is_double_quote(&x) {
-                    tokens.push(create_token(token_buffer.as_str(), DoubleQuote));
+                    tokens.push(create_token(token_buffer.as_str()));
                     token_buffer.clear();
                     state = Default
                 } else {
                     token_buffer.push(x)
                 }
             }
+            Escape => {
+                token_buffer.push(x); //All special meanings including "escape" fall apart
+                state = Default
+            }
         }
     }
     if !token_buffer.is_empty() {
         match state {
-            Plain | SingleQuote => {
-                tokens.push(create_token(token_buffer.as_str(), state));
+            Space => {}
+            _ => {
+                tokens.push(create_token(token_buffer.as_str()));
                 token_buffer.clear()
             }
-            _ => {}
         }
     }
 
@@ -139,16 +158,9 @@ fn tokens_to_strings(tokens: &Vec<Token>) -> Vec<String> {
                     buffer.clear();
                 }
             }
-            Plain => {
+            Str => {
                 buffer.push_str(tokens[i].value.as_str());
             }
-            SingleQuote => {
-                buffer.push_str(tokens[i].value.as_str());
-            }
-            DoubleQuote => {
-                buffer.push_str(tokens[i].value.as_str());
-            }
-            Default => continue
         }
     }
     if !buffer.is_empty() {
@@ -157,9 +169,16 @@ fn tokens_to_strings(tokens: &Vec<Token>) -> Vec<String> {
     result
 }
 
-fn create_token(token_string: &str, token_type: TokenType) -> Token {
+fn whitespace_token() -> Token {
+    Token {
+        value: "".to_string(),
+        token_type: WhiteSpace
+    }
+}
+
+fn create_token(token_string: &str) -> Token {
     Token {
         value: token_string.to_string(),
-        token_type
+        token_type: Str
     }
 }
