@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use crate::input_parser::State::{Space, Plain, SingleQuote, Default, DoubleQuote, Escape};
 use crate::input_parser::Token::{WhiteSpace, Str};
 
@@ -22,6 +23,7 @@ pub fn parse(input: &str) -> Vec<String> {
     let mut state: State = Default;
     let mut tokens = Vec::new();
     let mut token_buffer = String::new();
+    let mut state_stack: VecDeque<State> = VecDeque::new();
 
     while char_peek.peek().is_some() {
         let x =
@@ -104,13 +106,24 @@ pub fn parse(input: &str) -> Vec<String> {
                     tokens.push(Str(token_buffer.to_owned()));
                     token_buffer.clear();
                     state = Default
+                } else if is_backslash(&x) {
+                    state = Escape;
+                state_stack.push_back(DoubleQuote)
                 } else {
                     token_buffer.push(x)
                 }
             }
             Escape => {
-                token_buffer.push(x); //All special meanings including "escape" fall apart
-                state = Default
+                match state_stack.back() {
+                    Some(DoubleQuote) => {
+                        if !(is_backslash(&x) || is_double_quote(&x)) {
+                            token_buffer.push('\\')
+                        }
+                    }
+                    _ => {}
+                }
+                token_buffer.push(x);
+                state = state_stack.pop_back().unwrap_or(Default);
             }
         }
     }
