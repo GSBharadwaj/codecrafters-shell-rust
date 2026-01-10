@@ -67,20 +67,20 @@ fn execute(args: &Vec<String>) {
         Some(Builtin::Cd) => execute_cd(args),
         None => match get_cmd_path(&args[0]) {
             Some(_) => execute_command(&args),
-            None => println!("{}: command not found", args[0])
+            None => eprintln!("{}: command not found", args[0])
         }
     }
 }
 
 fn execute_cd(args: &Vec<String>) {
     if args.len() != 2 {
-        println!("Usage: cd <directory>");
+        eprintln!("Usage: cd <directory>");
         return;
     }
 
     let tilde_replaced_path_res = tilde_replaced_path(&args[1]);
     if tilde_replaced_path_res.is_none() {
-        println!("No home directory set");
+        eprintln!("No home directory set");
         return;
     }
 
@@ -89,18 +89,18 @@ fn execute_cd(args: &Vec<String>) {
         Ok(path_buf) => {
             let true_path = path_buf.as_path();
             if !true_path.exists() {
-                println!("{}: {}: No such file or directory", args[0], args[1])
+                eprintln!("{}: {}: No such file or directory", args[0], args[1])
             } else if !true_path.is_dir() {
-                println!("{}: {}: Not a directory", args[0], args[1])
+                eprintln!("{}: {}: Not a directory", args[0], args[1])
             } else {
                 let cd_result = env::set_current_dir(true_path);
                 match cd_result {
                     Ok(_) => {}
-                    Err(_) => println!("{}: {}: No such file or director", args[0], args[1])
+                    Err(_) => eprintln!("{}: {}: No such file or director", args[0], args[1])
                 }
             }
         }
-        Err(_) => println!("cd: {}: No such file or directory", args[1])
+        Err(_) => eprintln!("cd: {}: No such file or directory", args[1])
     }
 }
 
@@ -124,7 +124,7 @@ fn execute_exit(code: i32) {
 fn execute_echo(args: &Vec<String>) {
     let n = args.len();
     if n < 2 {
-        println!("Need at least one argument");
+        eprintln!("Need at least one argument");
         return;
     }
 
@@ -136,7 +136,7 @@ fn execute_echo(args: &Vec<String>) {
 
 fn execute_type(args: &Vec<String>) {
     if args.len() < 2 {
-        println!("Need at least one argument");
+        eprintln!("Need at least one argument");
         return;
     }
 
@@ -145,7 +145,7 @@ fn execute_type(args: &Vec<String>) {
         Some(_) => println!("{} is a shell builtin", &args[1]),
         _ => match get_cmd_path(&args[1]) {
             Some(full_path) =>  println!("{} is {}", &args[1], into_path_str(full_path)),
-            None => println!("{}: not found", &args[1]),
+            None => eprintln!("{}: not found", &args[1]),
         },
     }
 }

@@ -137,8 +137,7 @@ pub fn parse(input: &str) -> Vec<String> {
         }
     }
 
-    let res = tokens_to_strings(&tokens);
-    res
+    tokens_to_strings(&tokens)
 }
 
 fn is_single_quote(x: &char) -> bool {
