@@ -1,5 +1,5 @@
 use crate::input_parser::State::{Space, Plain, SingleQuote, Default, DoubleQuote, Escape};
-use crate::input_parser::TokenType::{WhiteSpace, Str};
+use crate::input_parser::Token::{WhiteSpace, Str};
 
 enum State {
     Default,
@@ -11,16 +11,10 @@ enum State {
 }
 
 #[derive(PartialEq)]
-enum TokenType {
+enum Token {
     WhiteSpace,
-    Str,
+    Str(String),
 }
-
-struct Token {
-    value: String,
-    token_type: TokenType
-}
-
 
 pub fn parse(input: &str) -> Vec<String> {
     let mut char_peek = input.chars().peekable();
@@ -58,19 +52,19 @@ pub fn parse(input: &str) -> Vec<String> {
                 if x.is_whitespace() {
                     continue;
                 } else if is_single_quote(&x) {
-                    tokens.push(whitespace_token());
+                    tokens.push(WhiteSpace);
                     token_buffer.clear();
                     state = SingleQuote
                 } else if is_double_quote(&x) {
-                    tokens.push(whitespace_token());
+                    tokens.push(WhiteSpace);
                     token_buffer.clear();
                     state = DoubleQuote
                 } else if is_backslash(&x) {
-                    tokens.push(whitespace_token());
+                    tokens.push(WhiteSpace);
                     token_buffer.clear();
                     state = Escape;
                 } else {
-                    tokens.push(whitespace_token());
+                    tokens.push(WhiteSpace);
                     token_buffer.clear();
                     state = Plain;
 
@@ -79,15 +73,15 @@ pub fn parse(input: &str) -> Vec<String> {
             }
             Plain => {
                 if x.is_whitespace() {
-                    tokens.push(create_token(token_buffer.as_str()));
+                    tokens.push(Str(token_buffer.to_owned()));
                     token_buffer.clear();
                     state = Space
                 } else if is_single_quote(&x) {
-                    tokens.push(create_token(token_buffer.as_str()));
+                    tokens.push(Str(token_buffer.to_owned()));
                     token_buffer.clear();
                     state = SingleQuote
                 } else if is_double_quote(&x) {
-                    tokens.push(create_token(token_buffer.as_str()));
+                    tokens.push(Str(token_buffer.to_owned()));
                     token_buffer.clear();
                     state = DoubleQuote
                 } else if is_backslash(&x) {
@@ -98,7 +92,7 @@ pub fn parse(input: &str) -> Vec<String> {
             }
             SingleQuote => {
                 if is_single_quote(&x) {
-                    tokens.push(create_token(token_buffer.as_str()));
+                    tokens.push(Str(token_buffer.to_owned()));
                     token_buffer.clear();
                     state = Default
                 } else {
@@ -107,7 +101,7 @@ pub fn parse(input: &str) -> Vec<String> {
             }
             DoubleQuote => {
                 if is_double_quote(&x) {
-                    tokens.push(create_token(token_buffer.as_str()));
+                    tokens.push(Str(token_buffer.to_owned()));
                     token_buffer.clear();
                     state = Default
                 } else {
@@ -124,7 +118,7 @@ pub fn parse(input: &str) -> Vec<String> {
         match state {
             Space => {}
             _ => {
-                tokens.push(create_token(token_buffer.as_str()));
+                tokens.push(Str(token_buffer.to_owned()));
                 token_buffer.clear()
             }
         }
@@ -151,15 +145,15 @@ fn tokens_to_strings(tokens: &Vec<Token>) -> Vec<String> {
     let mut result = Vec::new();
 
     for i in 0..tokens.len() {
-        match tokens[i].token_type {
+        match &tokens[i] {
             WhiteSpace => {
                 if !buffer.is_empty() {
                     result.push(buffer.as_str().to_string());
                     buffer.clear();
                 }
             }
-            Str => {
-                buffer.push_str(tokens[i].value.as_str());
+            Str(token) => {
+                buffer.push_str(token.as_str());
             }
         }
     }
@@ -167,18 +161,4 @@ fn tokens_to_strings(tokens: &Vec<Token>) -> Vec<String> {
         result.push(buffer.as_str().to_string());
     }
     result
-}
-
-fn whitespace_token() -> Token {
-    Token {
-        value: "".to_string(),
-        token_type: WhiteSpace
-    }
-}
-
-fn create_token(token_string: &str) -> Token {
-    Token {
-        value: token_string.to_string(),
-        token_type: Str
-    }
 }
