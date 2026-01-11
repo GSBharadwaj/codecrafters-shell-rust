@@ -1,10 +1,9 @@
 use std::collections::VecDeque;
-use crate::input_parser::State::{Space, Plain, SingleQuote, Default, DoubleQuote, Escape};
+use crate::input_parser::State::{Plain, SingleQuote, Default, DoubleQuote, Escape};
 use crate::input_parser::Token::{WhiteSpace, Str};
 
 enum State {
     Default,
-    Space,
     Plain,
     SingleQuote,
     DoubleQuote,
@@ -25,20 +24,11 @@ pub fn parse(input: &str) -> Vec<String> {
     let mut token_buffer = String::new();
     let mut state_stack: VecDeque<State> = VecDeque::new();
 
-    while char_peek.peek().is_some() {
-        let x =
-        match char_peek.next()  {
-            Some(y) => y,
-            None => break
-        };
-
-        if x == '\n' {
-            continue
-        }
+    while let Some(x) = char_peek.next() {
         match state {
             Default => {
                 if x.is_whitespace() {
-                    state = Space
+                    tokens.push(WhiteSpace)
                 } else if is_single_quote(&x) {
                     state = SingleQuote
                 } else if is_double_quote(&x) {
@@ -50,34 +40,13 @@ pub fn parse(input: &str) -> Vec<String> {
                     token_buffer.push(x)
                 }
             }
-            Space => {
-                if x.is_whitespace() {
-                    continue;
-                } else if is_single_quote(&x) {
-                    tokens.push(WhiteSpace);
-                    token_buffer.clear();
-                    state = SingleQuote
-                } else if is_double_quote(&x) {
-                    tokens.push(WhiteSpace);
-                    token_buffer.clear();
-                    state = DoubleQuote
-                } else if is_backslash(&x) {
-                    tokens.push(WhiteSpace);
-                    token_buffer.clear();
-                    state = Escape;
-                } else {
-                    tokens.push(WhiteSpace);
-                    token_buffer.clear();
-                    state = Plain;
-
-                    token_buffer.push(x);
-                }
-            }
             Plain => {
                 if x.is_whitespace() {
                     tokens.push(Str(token_buffer.to_owned()));
                     token_buffer.clear();
-                    state = Space
+
+                    tokens.push(WhiteSpace);
+                    state = Default
                 } else if is_single_quote(&x) {
                     tokens.push(Str(token_buffer.to_owned()));
                     token_buffer.clear();
@@ -107,34 +76,28 @@ pub fn parse(input: &str) -> Vec<String> {
                     token_buffer.clear();
                     state = Default
                 } else if is_backslash(&x) {
-                    state = Escape;
-                state_stack.push_back(DoubleQuote)
+                    match char_peek.peek() {
+                        Some('\\') |
+                        Some('"') => {
+                            state = Escape;
+                            state_stack.push_back(DoubleQuote);
+                        }
+                        _ => token_buffer.push(x)//treat it as literal
+                    }
                 } else {
-                    token_buffer.push(x)
+                    token_buffer.push(x);
                 }
             }
             Escape => {
-                match state_stack.back() {
-                    Some(DoubleQuote) => {
-                        if !(is_backslash(&x) || is_double_quote(&x)) {
-                            token_buffer.push('\\')
-                        }
-                    }
-                    _ => {}
-                }
                 token_buffer.push(x);
                 state = state_stack.pop_back().unwrap_or(Default);
             }
         }
     }
-    if !token_buffer.is_empty() {
-        match state {
-            Space => {}
-            _ => {
-                tokens.push(Str(token_buffer.to_owned()));
-                token_buffer.clear()
-            }
-        }
+    let last_string = token_buffer.as_str().trim();
+    if !last_string.is_empty() {
+        tokens.push(Str(last_string.to_string()));
+        token_buffer.clear()
     }
 
     tokens_to_strings(&tokens)
