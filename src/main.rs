@@ -1,8 +1,10 @@
 mod input_parser;
+mod models;
 
 #[allow(unused_imports)]
 use std::io::{self, Write};
 use std::process::{exit, Command};
+use models::ShellCmd;
 use std::{env};
 use std::path::{Path, PathBuf};
 use std::os::unix::fs::PermissionsExt;
@@ -34,8 +36,9 @@ fn main() {
     loop {
         display_prompt();
         let input = read_input();
-        let args = get_cmd_args(input.as_str());
-        execute(&args);
+        let cmd = get_cmd_args(input.as_str());
+
+        execute(&cmd.args);
     }
 }
 
@@ -51,7 +54,7 @@ fn read_input() -> String {
     cmd
 }
 
-fn get_cmd_args(input: &str) -> Vec<String> {
+fn get_cmd_args(input: &str) -> ShellCmd {
     input_parser::parse(input)
 }
 

@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 use crate::input_parser::State::{Plain, SingleQuote, Default, DoubleQuote, Escape};
-use crate::input_parser::Token::{WhiteSpace, Str};
+use crate::input_parser::Token::{WhiteSpace, Str, Redir};
+use crate::models::ShellCmd;
 
 enum State {
     Default,
@@ -13,10 +14,11 @@ enum State {
 #[derive(PartialEq)]
 enum Token {
     WhiteSpace,
+    Redir,
     Str(String),
 }
 
-pub fn parse(input: &str) -> Vec<String> {
+pub fn parse(input: &str) -> ShellCmd {
     let mut char_peek = input.chars().peekable();
 
     let mut state: State = Default;
@@ -35,6 +37,8 @@ pub fn parse(input: &str) -> Vec<String> {
                     state = DoubleQuote
                 } else if is_backslash(&x) {
                     state = Escape;
+                } else if is_redirect(&x) {
+                    tokens.push(Redir)
                 } else {
                     state = Plain;
                     token_buffer.push(x)
@@ -57,6 +61,15 @@ pub fn parse(input: &str) -> Vec<String> {
                     state = DoubleQuote
                 } else if is_backslash(&x) {
                     state = Escape
+                } else if is_redirect(&x){
+                    tokens.push(Str(token_buffer.to_owned()));
+                    token_buffer.clear();
+
+                    tokens.push(Redir);
+
+                    state = Default
+                } else if is_double_quote(&x) {
+
                 } else {
                     token_buffer.push(x)
                 }
@@ -103,6 +116,10 @@ pub fn parse(input: &str) -> Vec<String> {
     tokens_to_strings(&tokens)
 }
 
+fn is_redirect(x: &char) -> bool {
+    *x == '>'
+}
+
 fn is_single_quote(x: &char) -> bool {
     *x == '\''
 }
@@ -115,16 +132,31 @@ fn is_double_quote(x: &char) -> bool {
     *x == '"'
 }
 
-fn tokens_to_strings(tokens: &Vec<Token>) -> Vec<String> {
+fn tokens_to_strings(tokens: &Vec<Token>) -> ShellCmd {
     let mut buffer = String::new();
-    let mut result = Vec::new();
+    let mut args = Vec::new();
+    let mut redirection_path:  Option<String> = None;
+    let mut is_redirection_token = false;
 
     for i in 0..tokens.len() {
         match &tokens[i] {
             WhiteSpace => {
                 if !buffer.is_empty() {
-                    result.push(buffer.as_str().to_string());
+                    let buffer_str = buffer.as_str().to_string();
+                    if is_redirection_token {
+                        redirection_path = Some(buffer_str);
+                        is_redirection_token = false;
+                    } else {
+                        args.push(buffer_str)
+                    }
                     buffer.clear();
+                }
+            }
+            Redir => {
+                if (i + 1) < tokens.len() {
+                    is_redirection_token = true
+                } else {
+                    panic!("Invalid: no redirection token present")
                 }
             }
             Str(token) => {
@@ -133,7 +165,12 @@ fn tokens_to_strings(tokens: &Vec<Token>) -> Vec<String> {
         }
     }
     if !buffer.is_empty() {
-        result.push(buffer.as_str().to_string());
+        let buffer_str = buffer.as_str().to_string();
+        if is_redirection_token {
+            redirection_path = Some(buffer_str)
+        } else {
+            args.push(buffer_str);
+        }
     }
-    result
+    ShellCmd{args,redirection_path}
 }
