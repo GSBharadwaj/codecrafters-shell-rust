@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::mem::take;
 use crate::input_parser::State::{Plain, SingleQuote, Default, DoubleQuote, Escape};
 use crate::input_parser::Token::{WhiteSpace, Str, Redir};
 use crate::models::ShellCmd;
@@ -18,7 +19,7 @@ enum Token {
     Str(String),
 }
 
-pub fn parse(input: &str) -> ShellCmd {
+pub fn parse(input: &str) -> Result<ShellCmd, String> {
     let mut char_peek = input.chars().peekable();
 
     let mut state: State = Default;
@@ -113,7 +114,7 @@ pub fn parse(input: &str) -> ShellCmd {
         token_buffer.clear()
     }
 
-    tokens_to_strings(&tokens)
+    parse_tokens(&tokens)
 }
 
 fn is_redirect(x: &char) -> bool {
@@ -132,45 +133,58 @@ fn is_double_quote(x: &char) -> bool {
     *x == '"'
 }
 
-fn tokens_to_strings(tokens: &Vec<Token>) -> ShellCmd {
-    let mut buffer = String::new();
-    let mut args = Vec::new();
-    let mut redirection_path:  Option<String> = None;
-    let mut is_redirection_token = false;
+struct ParserState {
+    args: Vec<String>,
+    redirection_path: Option<String>,
+    is_redirection_token: bool,
+}
 
-    for i in 0..tokens.len() {
-        match &tokens[i] {
+fn parse_tokens(tokens: &Vec<Token>) -> Result<ShellCmd, String> {
+    let mut parser_state = ParserState {
+        args: Vec::new(),
+        redirection_path: None,
+        is_redirection_token: false,
+    };
+
+    let mut buffer = String::new();
+    let mut token_iter = tokens.iter().peekable();
+    while let Some(token) = token_iter.next() {
+        match token {
             WhiteSpace => {
-                if !buffer.is_empty() {
-                    let buffer_str = buffer.as_str().to_string();
-                    if is_redirection_token {
-                        redirection_path = Some(buffer_str);
-                        is_redirection_token = false;
-                    } else {
-                        args.push(buffer_str)
-                    }
-                    buffer.clear();
-                }
+                parser_state  = flush_buffer(take(&mut buffer), parser_state)?;
             }
             Redir => {
-                if (i + 1) < tokens.len() {
-                    is_redirection_token = true
-                } else {
-                    panic!("Invalid: no redirection token present")
-                }
+                parser_state = flush_buffer(take(&mut buffer), parser_state)?;
+                parser_state.is_redirection_token = true;
+
+                //Some fancy rust to skip whitespaces
+                while token_iter.next_if(|&t| matches!(t, WhiteSpace)).is_some() { }
             }
             Str(token) => {
                 buffer.push_str(token.as_str());
             }
         }
     }
-    if !buffer.is_empty() {
-        let buffer_str = buffer.as_str().to_string();
-        if is_redirection_token {
-            redirection_path = Some(buffer_str)
-        } else {
-            args.push(buffer_str);
-        }
+
+    parser_state = flush_buffer(take(&mut buffer), parser_state)?;
+
+    Ok(ShellCmd {
+        args: parser_state.args,
+        redirection_path: parser_state.redirection_path,
+    })
+}
+
+fn flush_buffer(buffer: String, mut state: ParserState) -> Result<ParserState, String> {
+    if buffer.is_empty() {
+        return if state.is_redirection_token {
+            Err("shell: expected file path".to_string())
+        } else { Ok(state) };
     }
-    ShellCmd{args,redirection_path}
+    if state.is_redirection_token {
+        state.redirection_path = Some(buffer);
+        state.is_redirection_token = false; // Reset after successfully finding the path
+    } else {
+        state.args.push(buffer);
+    }
+    Ok(state)
 }

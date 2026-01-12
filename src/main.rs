@@ -1,13 +1,14 @@
 mod input_parser;
 mod models;
 
+use models::ShellCmd;
+use std::fs::OpenOptions;
 #[allow(unused_imports)]
 use std::io::{self, Write};
-use std::process::{exit, Command};
-use models::ShellCmd;
-use std::{env};
-use std::path::{Path, PathBuf};
 use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
+use std::process::{exit, Command};
+use std::env;
 
 const PROMPT: &'static str = "$ ";
 const TILDE: &'static str = "~";
@@ -36,9 +37,32 @@ fn main() {
     loop {
         display_prompt();
         let input = read_input();
-        let cmd = get_cmd_args(input.as_str());
+        let cmd_res = get_cmd_args(input.as_str());
 
-        execute(&cmd.args);
+        if cmd_res.is_err() {
+            eprintln!("{}", cmd_res.err().unwrap());
+            continue;
+        }
+
+        let cmd = cmd_res.unwrap();
+        let mut output: Box<dyn Write>;
+
+        match cmd.redirection_path {
+            None => output = Box::new(io::stdout()),
+            Some(out_path) => {
+                let fie_res = OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .open(&out_path);
+
+                match fie_res {
+                    Err(e) => { eprintln!("shell: {}: {}: ", &out_path, &e); continue;}
+                    Ok(file) => output = Box::new(file),
+                }
+            }
+        }
+
+        execute(&cmd.args, &mut output);
     }
 }
 
@@ -54,17 +78,17 @@ fn read_input() -> String {
     cmd
 }
 
-fn get_cmd_args(input: &str) -> ShellCmd {
+fn get_cmd_args(input: &str) -> Result<ShellCmd, String> {
     input_parser::parse(input)
 }
 
-fn execute(args: &Vec<String>) {
+fn execute(args: &Vec<String>, output: &mut dyn Write) {
     if args.is_empty() {return;}
     let builtin_opt = get_builtin(&args[0]);
 
     match builtin_opt {
         Some(Builtin::Exit) => execute_exit(0),
-        Some(Builtin::Echo) => execute_echo(args),
+        Some(Builtin::Echo) => execute_echo(args, output),
         Some(Builtin::Type) => execute_type(args),
         Some(Builtin::Pwd) => execute_pwd(),
         Some(Builtin::Cd) => execute_cd(args),
@@ -124,7 +148,7 @@ fn execute_exit(code: i32) {
     exit(code)
 }
 
-fn execute_echo(args: &Vec<String>) {
+fn execute_echo(args: &Vec<String>, output: &mut dyn Write) {
     let n = args.len();
     if n < 2 {
         eprintln!("Need at least one argument");
@@ -132,9 +156,21 @@ fn execute_echo(args: &Vec<String>) {
     }
 
     for i in 1..(n - 1) {
-        print!("{} ", args[i])
+        write_out(output, &format!("{} ", args[i]))
     }
-    println!("{}", args[n - 1])
+    write_out_ln(output, &format!("{}", args[n - 1]))
+}
+
+fn write_out(output: &mut dyn Write, text: &str) {
+    if let Err(e) = write!(output, "{}", text) {
+        eprintln!("Error writing output: {}", e);
+    }
+}
+
+fn write_out_ln(output: &mut dyn Write, text: &str) {
+    if let Err(e) = writeln!(output, "{}", text) {
+        eprintln!("Error writing output: {}", e);
+    }
 }
 
 fn execute_type(args: &Vec<String>) {
