@@ -31,6 +31,9 @@ pub fn parse(input: &str) -> Result<ShellCmd, String> {
         match state {
             Default => {
                 if x.is_whitespace() {
+                    if x == '\n' {
+                        continue
+                    }
                     tokens.push(WhiteSpace)
                 } else if is_single_quote(&x) {
                     state = SingleQuote
@@ -77,9 +80,7 @@ pub fn parse(input: &str) -> Result<ShellCmd, String> {
                     token_buffer.clear();
 
                     tokens.push(Redir);
-
                     state = Default
-                } else if is_double_quote(&x) {
 
                 } else {
                     token_buffer.push(x)
