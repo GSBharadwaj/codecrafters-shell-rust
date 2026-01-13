@@ -40,6 +40,16 @@ pub fn parse(input: &str) -> Result<ShellCmd, String> {
                     state = Escape;
                 } else if is_redirect(&x) {
                     tokens.push(Redir)
+                } else if x == '1' {
+                    match char_peek.peek() {
+                        Some('>') => {
+                            continue
+                        },
+                        _ => {
+                            state = Plain;
+                            token_buffer.push(x)
+                        }
+                    }
                 } else {
                     state = Plain;
                     token_buffer.push(x)
