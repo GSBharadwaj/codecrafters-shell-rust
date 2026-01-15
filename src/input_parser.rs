@@ -1,12 +1,10 @@
 use std::collections::VecDeque;
-use std::mem::take;
-use crate::input_parser::State::{Plain, SingleQuote, Default, DoubleQuote, Escape};
-use crate::input_parser::Token::{WhiteSpace, Str, Redir};
+use crate::input_parser::State::{SingleQuote, Default, DoubleQuote, Escape};
+use crate::input_parser::Token::{Str, Redir, RedirErr};
 use crate::models::ShellCmd;
 
 enum State {
     Default,
-    Plain,
     SingleQuote,
     DoubleQuote,
     Escape,
@@ -14,8 +12,8 @@ enum State {
 
 #[derive(PartialEq)]
 enum Token {
-    WhiteSpace,
     Redir,
+    RedirErr,
     Str(String),
 }
 
@@ -31,10 +29,10 @@ pub fn parse(input: &str) -> Result<ShellCmd, String> {
         match state {
             Default => {
                 if x.is_whitespace() {
-                    if x == '\n' {
-                        continue
+                    if !token_buffer.is_empty() {
+                        tokens.push(Str(token_buffer.to_owned()));
+                        token_buffer.clear();
                     }
-                    tokens.push(WhiteSpace)
                 } else if is_single_quote(&x) {
                     state = SingleQuote
                 } else if is_double_quote(&x) {
@@ -49,47 +47,29 @@ pub fn parse(input: &str) -> Result<ShellCmd, String> {
                             continue
                         },
                         _ => {
-                            state = Plain;
                             token_buffer.push(x)
                         }
                     }
-                } else {
-                    state = Plain;
-                    token_buffer.push(x)
-                }
-            }
-            Plain => {
-                if x.is_whitespace() {
-                    tokens.push(Str(token_buffer.to_owned()));
-                    token_buffer.clear();
-
-                    tokens.push(WhiteSpace);
-                    state = Default
-                } else if is_single_quote(&x) {
-                    tokens.push(Str(token_buffer.to_owned()));
-                    token_buffer.clear();
-                    state = SingleQuote
-                } else if is_double_quote(&x) {
-                    tokens.push(Str(token_buffer.to_owned()));
-                    token_buffer.clear();
-                    state = DoubleQuote
-                } else if is_backslash(&x) {
-                    state = Escape
-                } else if is_redirect(&x){
-                    tokens.push(Str(token_buffer.to_owned()));
-                    token_buffer.clear();
-
-                    tokens.push(Redir);
-                    state = Default
-
+                } else if x == '2' {
+                    match char_peek.next() {
+                        Some('>') => {
+                            tokens.push(RedirErr);
+                            state = Default;
+                        },
+                        Some(c) => {
+                            token_buffer.push(x);
+                            token_buffer.push(c);
+                        }
+                        None => {
+                            token_buffer.push(x)
+                        }
+                    }
                 } else {
                     token_buffer.push(x)
                 }
             }
             SingleQuote => {
                 if is_single_quote(&x) {
-                    tokens.push(Str(token_buffer.to_owned()));
-                    token_buffer.clear();
                     state = Default
                 } else {
                     token_buffer.push(x)
@@ -97,8 +77,6 @@ pub fn parse(input: &str) -> Result<ShellCmd, String> {
             }
             DoubleQuote => {
                 if is_double_quote(&x) {
-                    tokens.push(Str(token_buffer.to_owned()));
-                    token_buffer.clear();
                     state = Default
                 } else if is_backslash(&x) {
                     match char_peek.peek() {
@@ -144,58 +122,45 @@ fn is_double_quote(x: &char) -> bool {
     *x == '"'
 }
 
-struct ParserState {
-    args: Vec<String>,
-    redirection_path: Option<String>,
-    is_redirection_token: bool,
-}
 
 fn parse_tokens(tokens: &Vec<Token>) -> Result<ShellCmd, String> {
-    let mut parser_state = ParserState {
-        args: Vec::new(),
-        redirection_path: None,
-        is_redirection_token: false,
-    };
+    let mut args = Vec::new();
 
-    let mut buffer = String::new();
+    let mut redirection_path = None;
+    let mut err_redirection_path = None;
     let mut token_iter = tokens.iter().peekable();
+
     while let Some(token) = token_iter.next() {
         match token {
-            WhiteSpace => {
-                parser_state  = flush_buffer(take(&mut buffer), parser_state)?;
+            RedirErr => {
+                match token_iter.next() {
+                    Some(Str(x)) => err_redirection_path = Some(x.to_owned()),
+                    Some(RedirErr) => { return Err("shell: unexpected token 2".to_string()) },
+                    Some(Redir) => { return Err("shell: unexpected token >".to_string()) },
+                    None => { return Err("shell: unexpected token \\\n".to_string()); },
+                }
             }
             Redir => {
-                parser_state = flush_buffer(take(&mut buffer), parser_state)?;
-                parser_state.is_redirection_token = true;
 
+                match token_iter.next() {
+                    Some(Str(x)) => redirection_path = Some(x.to_owned()),
+                    Some(RedirErr) => { return Err("shell: unexpected token 2".to_string()) },
+                    Some(Redir) => { return Err("shell: unexpected token >".to_string()) },
+                    None => { return Err("shell: unexpected token \\\n".to_string()); },
+                }
                 //Some fancy rust to skip whitespaces
-                while token_iter.next_if(|&t| matches!(t, WhiteSpace)).is_some() { }
             }
             Str(token) => {
-                buffer.push_str(token.as_str());
+                args.push(token.to_string());
             }
         }
     }
 
-    parser_state = flush_buffer(take(&mut buffer), parser_state)?;
 
     Ok(ShellCmd {
-        args: parser_state.args,
-        redirection_path: parser_state.redirection_path,
+        args,
+        redirection_path,
+        err_redirection_path,
     })
 }
 
-fn flush_buffer(buffer: String, mut state: ParserState) -> Result<ParserState, String> {
-    if buffer.is_empty() {
-        return if state.is_redirection_token {
-            Err("shell: expected file path".to_string())
-        } else { Ok(state) };
-    }
-    if state.is_redirection_token {
-        state.redirection_path = Some(buffer);
-        state.is_redirection_token = false; // Reset after successfully finding the path
-    } else {
-        state.args.push(buffer);
-    }
-    Ok(state)
-}
