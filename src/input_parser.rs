@@ -12,8 +12,8 @@ enum State {
 
 #[derive(PartialEq)]
 enum Token {
-    Redir,
-    RedirErr,
+    Redir(/*append?*/ bool),
+    RedirErr(/*append?*/ bool),
     Str(String),
 }
 
@@ -39,28 +39,35 @@ pub fn parse(input: &str) -> Result<ShellCmd, String> {
                     state = DoubleQuote
                 } else if is_backslash(&x) {
                     state = Escape;
-                } else if is_redirect(&x) {
-                    tokens.push(Redir)
-                } else if x == '1' {
+                } else if x == '>' {
                     match char_peek.peek() {
                         Some('>') => {
-                            continue
-                        },
-                        _ => {
-                            token_buffer.push(x)
+                            char_peek.next();
+                            tokens.push(Redir(true))
                         }
+                        _ => { tokens.push(Redir(false)) }
+                    }
+                } else if x == '1' {
+                    match char_peek.peek() {
+                        Some('>') => { continue },
+                        _ => { token_buffer.push(x) }
                     }
                 } else if x == '2' {
-                    match char_peek.next() {
+                    match char_peek.peek() {
                         Some('>') => {
-                            tokens.push(RedirErr);
+                            char_peek.next();
+                            match char_peek.peek() {
+                                Some('>') => {
+                                    char_peek.next();
+                                    tokens.push(RedirErr(true))
+                                }
+                                _ => {
+                                    tokens.push(RedirErr(false));
+                                }
+                            }
                             state = Default;
                         },
-                        Some(c) => {
-                            token_buffer.push(x);
-                            token_buffer.push(c);
-                        }
-                        None => {
+                        _ => {
                             token_buffer.push(x)
                         }
                     }
@@ -106,10 +113,6 @@ pub fn parse(input: &str) -> Result<ShellCmd, String> {
     parse_tokens(&tokens)
 }
 
-fn is_redirect(x: &char) -> bool {
-    *x == '>'
-}
-
 fn is_single_quote(x: &char) -> bool {
     *x == '\''
 }
@@ -127,25 +130,33 @@ fn parse_tokens(tokens: &Vec<Token>) -> Result<ShellCmd, String> {
     let mut args = Vec::new();
 
     let mut redirection_path = None;
+    let mut redirection_append = false;
     let mut err_redirection_path = None;
+    let mut err_redirection_append = false;
     let mut token_iter = tokens.iter().peekable();
 
     while let Some(token) = token_iter.next() {
         match token {
-            RedirErr => {
+            RedirErr (append)=> {
                 match token_iter.next() {
-                    Some(Str(x)) => err_redirection_path = Some(x.to_owned()),
-                    Some(RedirErr) => { return Err("shell: unexpected token 2".to_string()) },
-                    Some(Redir) => { return Err("shell: unexpected token >".to_string()) },
+                    Some(Str(x)) => {
+                        err_redirection_path = Some(x.to_owned());
+                        err_redirection_append = *append;
+                    },
+                    Some(RedirErr(_)) => { return Err("shell: unexpected token 2".to_string()) },
+                    Some(Redir(_)) => { return Err("shell: unexpected token >".to_string()) },
                     None => { return Err("shell: unexpected token \\\n".to_string()); },
                 }
             }
-            Redir => {
+            Redir(append) => {
 
                 match token_iter.next() {
-                    Some(Str(x)) => redirection_path = Some(x.to_owned()),
-                    Some(RedirErr) => { return Err("shell: unexpected token 2".to_string()) },
-                    Some(Redir) => { return Err("shell: unexpected token >".to_string()) },
+                    Some(Str(x)) => {
+                        redirection_path = Some(x.to_owned());
+                        redirection_append = *append;
+                    },
+                    Some(RedirErr(_)) => { return Err("shell: unexpected token 2".to_string()) },
+                    Some(Redir(_)) => { return Err("shell: unexpected token >".to_string()) },
                     None => { return Err("shell: unexpected token \\\n".to_string()); },
                 }
                 //Some fancy rust to skip whitespaces
@@ -160,7 +171,9 @@ fn parse_tokens(tokens: &Vec<Token>) -> Result<ShellCmd, String> {
     Ok(ShellCmd {
         args,
         redirection_path,
+        redirection_append,
         err_redirection_path,
+        err_redirection_append,
     })
 }
 

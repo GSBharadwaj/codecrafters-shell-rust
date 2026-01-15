@@ -46,7 +46,7 @@ fn main() {
 
         let cmd = cmd_res.unwrap();
 
-        let output_file = match get_file(cmd.redirection_path.as_ref(), false) {
+        let output_file = match get_file(cmd.redirection_path.as_ref(), cmd.redirection_append) {
             Ok(value) => value,
             Err(e) => {
                 eprintln!("shell: {}: {}: ", &cmd.redirection_path.unwrap_or("".to_string()), &e);
@@ -54,7 +54,7 @@ fn main() {
             },
         };
 
-        let error_file = match get_file(cmd.err_redirection_path.as_ref(), false) {
+        let error_file = match get_file(cmd.err_redirection_path.as_ref(), cmd.err_redirection_append) {
             Ok(value) => value,
             Err(e) => {
                 eprintln!("shell: {}: {}: ", &cmd.redirection_path.unwrap_or("".to_string()), &e);
@@ -63,7 +63,7 @@ fn main() {
         };
 
 
-        execute(&cmd.args, output_file, error_file);
+        execute(&cmd.args, output_file, error_file,);
     }
 }
 
@@ -74,7 +74,8 @@ fn get_file(file_path: Option<&String>, should_append: bool) -> Result<Option<Fi
             let fie_res =
                 OpenOptions::new()
                     .create(true) .write(true)
-                    .truncate(!should_append).append(should_append)
+                    .truncate(!should_append)
+                    .append(should_append)
                     .open(&out_path);
 
             match fie_res {
@@ -103,7 +104,9 @@ fn get_cmd_args(input: &str) -> Result<ShellCmd, String> {
     input_parser::parse(input)
 }
 
-fn execute(args: &Vec<String>, out_file: Option<File>, err_file: Option<File>) {
+fn execute(args: &Vec<String>,
+           out_file: Option<File>,
+           err_file: Option<File>) {
     if args.is_empty() {
         return;
     }
@@ -190,6 +193,7 @@ fn execute_echo(args: &Vec<String>, output: &mut dyn Write) {
     let n = args.len();
     if n == 1 {
         write_out_ln(output, "");
+        return;
     }
 
     for i in 1..(n - 1) {
