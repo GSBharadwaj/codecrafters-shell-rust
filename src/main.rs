@@ -10,6 +10,7 @@ use std::io::{self, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, exit};
+use rustyline::DefaultEditor;
 
 const PROMPT: &'static str = "$ ";
 const TILDE: &'static str = "~";
@@ -33,10 +34,16 @@ fn get_builtin(cmd: &String) -> Option<Builtin> {
     }
 }
 
-fn main() {
+fn main() -> rustyline::Result<()>{
+    let mut rl = DefaultEditor::new()?;
+
     loop {
-        display_prompt();
-        let input = read_input();
+        let rl_input = rl.readline(PROMPT);
+        let input = match rl_input {
+            Ok(line) => { line }
+            Err(r) => { return Err(r) }
+        };
+
         let cmd_res = get_cmd_args(input.as_str());
 
         if cmd_res.is_err() {
@@ -91,13 +98,6 @@ fn get_file(file_path: Option<&String>, should_append: bool) -> Result<Option<Fi
 fn display_prompt() {
     print!("{}", PROMPT);
     stdout().flush().unwrap();
-}
-
-fn read_input() -> String {
-    let mut cmd = String::new();
-    io::stdin().read_line(&mut cmd).unwrap();
-
-    cmd
 }
 
 fn get_cmd_args(input: &str) -> Result<ShellCmd, String> {
