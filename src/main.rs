@@ -3,18 +3,18 @@ mod models;
 mod readline_helper;
 
 use models::ShellCmd;
-use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::stdout;
+use std::{env, fs};
 
 
+use crate::readline_helper::ReadLineHelper;
 use rustyline::Config;
 use rustyline::Editor;
 use std::io::{self, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
-use crate::readline_helper::ReadLineHelper;
 
 const PROMPT: &'static str = "$ ";
 const TILDE: &'static str = "~";
@@ -40,7 +40,15 @@ fn get_builtin(cmd: &String) -> Option<Builtin> {
 
 fn main() -> rustyline::Result<()>{
     let mut readline_helper = ReadLineHelper::default();
-    readline_helper.set_commands(vec!["echo".to_string(), "exit".to_string(), "type".to_string()]);
+    let builtin_commands = vec![
+                                      "echo".to_string(),
+                                      "exit".to_string(),
+                                      "type".to_string(),
+                                      "pwd".to_string(),];
+    let mut all_commands = get_all_executables();
+
+    all_commands.extend(builtin_commands);
+    readline_helper.set_commands(all_commands);
 
     let config = Config::builder()
         .history_ignore_space(false)
@@ -292,6 +300,31 @@ fn get_cmd_path(cmd: &str) -> Option<PathBuf> {
         }
     }
     None
+}
+
+fn get_all_executables() -> Vec<String> {
+    let paths;
+    match env::var_os("PATH") {
+        None => {return Vec::new()}
+        Some(x) => {paths = x}
+    }
+
+    let mut res = Vec::new();
+
+    for dir in env::split_paths(&paths) {
+        if !dir.is_dir() {
+            continue
+        }
+        let entries = fs::read_dir(dir).unwrap();
+        for entry in entries {
+            let entry = entry.unwrap().path();
+            if entry.is_file() && is_executable(&entry) {
+                res.push(entry.file_name().unwrap().to_str().unwrap().to_string());
+            }
+        }
+    }
+
+    res
 }
 
 fn is_executable(path_buf: &PathBuf) -> bool {
