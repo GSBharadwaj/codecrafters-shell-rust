@@ -1,16 +1,20 @@
 mod input_parser;
 mod models;
+mod readline_helper;
 
 use models::ShellCmd;
 use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::stdout;
 
+
+use rustyline::Config;
+use rustyline::Editor;
 use std::io::{self, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::process::{Command, exit};
-use rustyline::DefaultEditor;
+use std::process::{exit, Command};
+use crate::readline_helper::ReadLineHelper;
 
 const PROMPT: &'static str = "$ ";
 const TILDE: &'static str = "~";
@@ -35,7 +39,14 @@ fn get_builtin(cmd: &String) -> Option<Builtin> {
 }
 
 fn main() -> rustyline::Result<()>{
-    let mut rl = DefaultEditor::new()?;
+    let mut readline_helper = ReadLineHelper::default();
+    readline_helper.set_commands(vec!["echo".to_string(), "exit".to_string(), "type".to_string()]);
+
+    let config = Config::builder()
+        .history_ignore_space(false)
+        .build();
+    let mut rl = Editor::with_config(config)?;
+    rl.set_helper(Some(readline_helper));
 
     loop {
         let rl_input = rl.readline(PROMPT);
@@ -95,10 +106,6 @@ fn get_file(file_path: Option<&String>, should_append: bool) -> Result<Option<Fi
     }
 }
 
-fn display_prompt() {
-    print!("{}", PROMPT);
-    stdout().flush().unwrap();
-}
 
 fn get_cmd_args(input: &str) -> Result<ShellCmd, String> {
     input_parser::parse(input)
