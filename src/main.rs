@@ -1,6 +1,7 @@
 mod input_parser;
 mod models;
 mod readline_helper;
+mod trie;
 
 use models::ShellCmd;
 use std::fs::{File, OpenOptions};
@@ -39,16 +40,15 @@ fn get_builtin(cmd: &String) -> Option<Builtin> {
 }
 
 fn main() -> rustyline::Result<()>{
-    let mut readline_helper = ReadLineHelper::default();
     let builtin_commands = vec![
                                       "echo".to_string(),
                                       "exit".to_string(),
                                       "type".to_string(),
                                       "pwd".to_string(),];
     let mut all_commands = get_all_executables();
-
     all_commands.extend(builtin_commands);
-    readline_helper.set_commands(all_commands);
+
+    let readline_helper = ReadLineHelper::new(all_commands);
 
     let config = Config::builder()
         .completion_type(CompletionType::List)

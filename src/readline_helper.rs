@@ -3,21 +3,16 @@ use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
 use rustyline::validate::Validator;
 use rustyline::Context;
+use crate::trie::trie::Trie;
 
 pub struct ReadLineHelper {
-    commands: Vec<String>,
+    command_trie: Trie,
 }
 
 impl ReadLineHelper {
-    pub fn set_commands(&mut self, commands: Vec<String>) {
-        self.commands = commands
-    }
-}
-
-impl Default for ReadLineHelper {
-    fn default() -> Self {
+    pub fn new(commands: Vec<String>) -> Self {
         Self {
-            commands : vec![],
+            command_trie: Trie::new(commands),
         }
     }
 }
@@ -31,10 +26,8 @@ impl Completer for ReadLineHelper {
             return Ok((0, Vec::new()))
         }
 
-        let mut matches: Vec<String> = self.commands
-            .iter()
-            .filter(|cmd| cmd.starts_with(input))
-            .cloned().collect();
+        let mut matches: Vec<String> = self.command_trie.prefix_search(input);
+
         matches.sort();
         matches.dedup();
 
