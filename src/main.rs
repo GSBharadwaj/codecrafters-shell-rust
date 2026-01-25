@@ -9,7 +9,7 @@ use std::{env, fs};
 
 
 use crate::readline_helper::ReadLineHelper;
-use rustyline::Config;
+use rustyline::{CompletionType, Config};
 use rustyline::Editor;
 use std::io::{self, Write};
 use std::os::unix::fs::PermissionsExt;
@@ -51,6 +51,7 @@ fn main() -> rustyline::Result<()>{
     readline_helper.set_commands(all_commands);
 
     let config = Config::builder()
+        .completion_type(CompletionType::List)
         .history_ignore_space(false)
         .build();
     let mut rl = Editor::with_config(config)?;
@@ -87,7 +88,6 @@ fn main() -> rustyline::Result<()>{
                 continue
             },
         };
-
 
         execute(&cmd.args, output_file, error_file,);
     }

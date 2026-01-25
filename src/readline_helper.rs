@@ -34,10 +34,11 @@ impl Completer for ReadLineHelper {
 
         let (start, _) = extract_word(line, pos, None, |s|  s.is_whitespace());
 
-        let matches: Vec<String> = self.commands
+        let mut matches: Vec<String> = self.commands
             .iter()
             .filter(|cmd| cmd.starts_with(input))
             .cloned().collect();
+        matches.sort();
         Ok((start, matches))
     }
 
