@@ -4,9 +4,11 @@ use rustyline::hint::Hinter;
 use rustyline::line_buffer::LineBuffer;
 use rustyline::validate::Validator;
 use rustyline::{Changeset, Context};
+use std::cell::Cell;
 
 pub struct ReadLineHelper {
-    commands: Vec<String>
+    commands: Vec<String>,
+    unique_match_for_completion: Cell<Option<bool>>,
 }
 
 impl ReadLineHelper {
@@ -18,7 +20,8 @@ impl ReadLineHelper {
 impl Default for ReadLineHelper {
     fn default() -> Self {
         Self {
-            commands : vec![]
+            commands : vec![],
+            unique_match_for_completion: Cell::new(None),
         }
     }
 }
@@ -39,11 +42,19 @@ impl Completer for ReadLineHelper {
             .filter(|cmd| cmd.starts_with(input))
             .cloned().collect();
         matches.sort();
+        matches.dedup();
+        self.unique_match_for_completion.set(Some(matches.len() == 1));
         Ok((start, matches))
     }
 
     fn update(&self, line: &mut LineBuffer, start: usize, elected: &str, cl: &mut Changeset) {
-        let completion = format!("{} ", elected);
+        let completion =
+            match self.unique_match_for_completion.get() {
+                Some(true) => {
+                    format!("{} ", elected)
+                },
+                _ => elected.to_string()
+            };
         line.replace(start..line.pos(), &completion, cl);
     }
 }
