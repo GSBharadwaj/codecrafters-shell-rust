@@ -71,25 +71,34 @@ fn main() -> rustyline::Result<()>{
             continue;
         }
 
-        let cmd = cmd_res.unwrap();
+        let cmd_list = cmd_res.unwrap();
+        if cmd_list.len() < 1 {
+            continue
+        }
+        if cmd_list.len() > 2 {
+            eprintln!("{}", "Can only process at most 2 commands for now");
+            continue;
+        }
 
-        let output_file = match get_file(cmd.redirection_path.as_ref(), cmd.redirection_append) {
-            Ok(value) => value,
-            Err(e) => {
-                eprintln!("shell: {}: {}: ", &cmd.redirection_path.unwrap_or("".to_string()), &e);
-                continue
-            },
-        };
+        for (i, cmd) in cmd_list.iter().enumerate() {
+            let output_file = match get_file(cmd.redirection_path.as_ref(), cmd.redirection_append) {
+                Ok(value) => value,
+                Err(e) => {
+                    eprintln!("shell: {}: {}: ", cmd.redirection_path.as_deref().unwrap_or(""), &e);
+                    continue
+                },
+            };
 
-        let error_file = match get_file(cmd.err_redirection_path.as_ref(), cmd.err_redirection_append) {
-            Ok(value) => value,
-            Err(e) => {
-                eprintln!("shell: {}: {}: ", &cmd.redirection_path.unwrap_or("".to_string()), &e);
-                continue
-            },
-        };
+            let error_file = match get_file(cmd.err_redirection_path.as_ref(), cmd.err_redirection_append) {
+                Ok(value) => value,
+                Err(e) => {
+                    eprintln!("shell: {}: {}: ", &cmd.err_redirection_path.as_deref().unwrap_or(""), &e);
+                    continue
+                },
+            };
 
-        execute(&cmd.args, output_file, error_file,);
+            execute(&cmd.args, output_file, error_file,);
+        }
     }
 }
 
@@ -115,7 +124,7 @@ fn get_file(file_path: Option<&String>, should_append: bool) -> Result<Option<Fi
 }
 
 
-fn get_cmd_args(input: &str) -> Result<ShellCmd, String> {
+fn get_cmd_args(input: &str) -> Result<Vec<ShellCmd>, String> {
     input_parser::parse(input)
 }
 

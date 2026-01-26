@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 use crate::input_parser::State::{SingleQuote, Default, DoubleQuote, Escape};
-use crate::input_parser::Token::{Str, Redir, RedirErr};
+use crate::input_parser::Token::{Str, Redir, RedirErr, Pipe};
 use crate::models::ShellCmd;
 
 enum State {
@@ -14,10 +14,11 @@ enum State {
 enum Token {
     Redir(/*append?*/ bool),
     RedirErr(/*append?*/ bool),
+    Pipe,
     Str(String),
 }
 
-pub fn parse(input: &str) -> Result<ShellCmd, String> {
+pub fn parse(input: &str) -> Result<Vec<ShellCmd>, String> {
     let mut char_peek = input.chars().peekable();
 
     let mut state: State = Default;
@@ -71,6 +72,12 @@ pub fn parse(input: &str) -> Result<ShellCmd, String> {
                             token_buffer.push(x)
                         }
                     }
+                } else if x == '|' {
+                    if !token_buffer.is_empty() {
+                        tokens.push(Str(token_buffer.to_owned()));
+                        token_buffer.clear();
+                    }
+                    tokens.push(Pipe)
                 } else {
                     token_buffer.push(x)
                 }
@@ -126,8 +133,9 @@ fn is_double_quote(x: &char) -> bool {
 }
 
 
-fn parse_tokens(tokens: &Vec<Token>) -> Result<ShellCmd, String> {
+fn parse_tokens(tokens: &Vec<Token>) -> Result<Vec<ShellCmd>, String> {
     let mut args = Vec::new();
+    let mut cmds = Vec::new();
 
     let mut redirection_path = None;
     let mut redirection_append = false;
@@ -145,11 +153,11 @@ fn parse_tokens(tokens: &Vec<Token>) -> Result<ShellCmd, String> {
                     },
                     Some(RedirErr(_)) => { return Err("shell: unexpected token 2".to_string()) },
                     Some(Redir(_)) => { return Err("shell: unexpected token >".to_string()) },
+                    Some(Pipe) => { return Err("shell: unexpected token |".to_string()) }
                     None => { return Err("shell: unexpected token \\\n".to_string()); },
                 }
             }
             Redir(append) => {
-
                 match token_iter.next() {
                     Some(Str(x)) => {
                         redirection_path = Some(x.to_owned());
@@ -157,6 +165,7 @@ fn parse_tokens(tokens: &Vec<Token>) -> Result<ShellCmd, String> {
                     },
                     Some(RedirErr(_)) => { return Err("shell: unexpected token 2".to_string()) },
                     Some(Redir(_)) => { return Err("shell: unexpected token >".to_string()) },
+                    Some(Pipe) => { return Err("shell: unexpected token |".to_string()) }
                     None => { return Err("shell: unexpected token \\\n".to_string()); },
                 }
                 //Some fancy rust to skip whitespaces
@@ -164,16 +173,31 @@ fn parse_tokens(tokens: &Vec<Token>) -> Result<ShellCmd, String> {
             Str(token) => {
                 args.push(token.to_string());
             }
+            Pipe => {
+                cmds.push(ShellCmd {
+                    args,
+                    redirection_path,
+                    redirection_append,
+                    err_redirection_path,
+                    err_redirection_append,
+                });
+
+                args = Vec::new();
+                redirection_path = None;
+                redirection_append = false;
+                err_redirection_path = None;
+                err_redirection_append = false;
+            }
         }
     }
-
-
-    Ok(ShellCmd {
+    cmds.push(ShellCmd {
         args,
         redirection_path,
         redirection_append,
         err_redirection_path,
         err_redirection_append,
-    })
+    });
+
+    Ok(cmds)
 }
 

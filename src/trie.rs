@@ -22,7 +22,7 @@ pub mod trie {
         pub fn new<I, S>(words: I) -> Self
         where
             I: IntoIterator<Item = S>,
-            S: AsRef<str>, // "Anything that can be seen as a &str"
+            S: AsRef<str>, // "Anything that can be seen as a &str". This is so damn cool!
         {
             let mut trie = Self {
                 root: TrieNode::new(),
@@ -43,14 +43,14 @@ pub mod trie {
             cur.is_terminal = true
         }
 
-        fn prefix_search_dfs(&self, node: &TrieNode, slate: &mut String, results: &mut Vec<String>) {
+        fn prefix_search_dfs_helper(&self, node: &TrieNode, slate: &mut String, results: &mut Vec<String>) {
             if node.is_terminal {
                 results.push(slate.clone())
             }
 
             for (&ch, child) in &node.children {
                 slate.push(ch);
-                self.prefix_search_dfs(child, slate, results);
+                self.prefix_search_dfs_helper(child, slate, results);
                 slate.pop();
             }
         }
@@ -67,7 +67,7 @@ pub mod trie {
             let mut slate = String::new();
             slate.push_str(word);
 
-            self.prefix_search_dfs(current, &mut slate, &mut results);
+            self.prefix_search_dfs_helper(current, &mut slate, &mut results);
             results
         }
     }
