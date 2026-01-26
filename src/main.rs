@@ -162,8 +162,8 @@ fn execute(args: &Vec<String>,
 
     match builtin_opt {
         Some(x) => {
-            let mut output = get_write(out_file);
-            let mut err_out = get_write(err_file);
+            let mut output = get_write(out_file, writer);
+            let mut err_out = get_write(err_file, None);
             match x {
                 Builtin::Exit => {execute_exit(0); None},
                 Builtin::Echo => {execute_echo(args, &mut output); None}
@@ -179,9 +179,14 @@ fn execute(args: &Vec<String>,
     }
 }
 
-fn get_write(file: Option<File>) -> Box<dyn Write> {
+fn get_write(file: Option<File>, pipe: Option<PipeWriter>) -> Box<dyn Write> {
     match file {
-        None => Box::new(stdout()),
+        None => {
+            match pipe {
+                None => {Box::new(stdout())}
+                Some(p) => {Box::new(p)}
+            }
+        },
         Some(f) => Box::new(f),
     }
 }
