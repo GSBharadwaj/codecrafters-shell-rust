@@ -5,17 +5,16 @@ mod trie;
 
 use models::ShellCmd;
 use std::fs::{File, OpenOptions};
-use std::io::stdout;
+use std::io::{pipe, stdout, PipeReader, PipeWriter};
 use std::{env, fs};
-
-
+use std::collections::VecDeque;
 use crate::readline_helper::ReadLineHelper;
 use rustyline::{CompletionType, Config};
 use rustyline::Editor;
 use std::io::{self, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::process::{exit, Command};
+use std::process::{exit, Child, Command};
 
 const PROMPT: &'static str = "$ ";
 const TILDE: &'static str = "~";
@@ -57,6 +56,7 @@ fn main() -> rustyline::Result<()>{
     let mut rl = Editor::with_config(config)?;
     rl.set_helper(Some(readline_helper));
 
+
     loop {
         let rl_input = rl.readline(PROMPT);
         let input = match rl_input {
@@ -75,12 +75,24 @@ fn main() -> rustyline::Result<()>{
         if cmd_list.len() < 1 {
             continue
         }
-        if cmd_list.len() > 2 {
-            eprintln!("{}", "Can only process at most 2 commands for now");
-            continue;
-        }
 
+        let mut child_processes = Vec::new();
+        let mut pipes = VecDeque::new();
         for (i, cmd) in cmd_list.iter().enumerate() {
+            let next = cmd_list.get(i + 1);
+            let reader =  pipes.pop_back();
+
+            let writer =
+                if let Some((reader, writer)) = next.map(|_| pipe().ok()).flatten() {
+                    pipes.push_front(reader);
+                    Some(writer)
+                } else if next.is_some() {
+                    eprintln!("shell: {}: failed to create pipe", cmd.args[0]);
+                    continue;
+                } else {
+                    None
+                };
+
             let output_file = match get_file(cmd.redirection_path.as_ref(), cmd.redirection_append) {
                 Ok(value) => value,
                 Err(e) => {
@@ -97,7 +109,17 @@ fn main() -> rustyline::Result<()>{
                 },
             };
 
-            execute(&cmd.args, output_file, error_file,);
+            if let Some(child) = execute(&cmd.args, output_file, error_file, reader, writer) {
+                child_processes.push((i, child))
+            }
+        }
+
+        for (i, child_process) in child_processes {
+            let outcome = child_process.and_then(|mut child| child.wait());
+            if let Err(e) = outcome {
+                let cmd_name = &cmd_list[i].args[0];
+                eprintln!("shell: failed to execute {cmd_name}: {e}")
+            }
         }
     }
 }
@@ -130,9 +152,11 @@ fn get_cmd_args(input: &str) -> Result<Vec<ShellCmd>, String> {
 
 fn execute(args: &Vec<String>,
            out_file: Option<File>,
-           err_file: Option<File>) {
+           err_file: Option<File>,
+           reader: Option<PipeReader>,
+           writer: Option<PipeWriter> ) -> Option<io::Result<Child>> {
     if args.is_empty() {
-        return;
+        return None;
     }
     let builtin_opt = get_builtin(&args[0]);
 
@@ -141,16 +165,16 @@ fn execute(args: &Vec<String>,
             let mut output = get_write(out_file);
             let mut err_out = get_write(err_file);
             match x {
-                Builtin::Exit => execute_exit(0),
-                Builtin::Echo => execute_echo(args, &mut output),
-                Builtin::Type => execute_type(args, &mut output, &mut err_out),
-                Builtin::Pwd => execute_pwd(&mut output),
-                Builtin::Cd => execute_cd(args, &mut err_out),
+                Builtin::Exit => {execute_exit(0); None},
+                Builtin::Echo => {execute_echo(args, &mut output); None}
+                Builtin::Type => {execute_type(args, &mut output, &mut err_out); None}
+                Builtin::Pwd => {execute_pwd(&mut output); None}
+                Builtin::Cd => {execute_cd(args, &mut err_out); None}
             }
         }
         None => match get_cmd_path(&args[0]) {
-            Some(_) => execute_command(&args, out_file, err_file),
-            None => eprintln!("{}: command not found", args[0]),
+            Some(_) => {spawn_command(&args, out_file, err_file, reader, writer)},
+            None => {eprintln!("{}: command not found", args[0]); None}
         },
     }
 }
@@ -264,16 +288,30 @@ fn execute_pwd(output: &mut dyn Write) {
     }
 }
 
-fn execute_command(args: &Vec<String>, out_file: Option<File>, err_file: Option<File>) {
+fn spawn_command(args: &Vec<String>,
+                 out_file: Option<File>,
+                 err_file: Option<File>,
+                 reader: Option<PipeReader>,
+                 writer: Option<PipeWriter>) -> Option<io::Result<Child>> {
     let mut child_cmd = Command::new(&args[0]);
     child_cmd.args(&args[1..]);
 
     match out_file {
-        None => {}
+        None => {
+            if let Some(f) = writer  {
+                child_cmd.stdout(f);
+            }
+        }
         Some(f) => {
             child_cmd.stdout(f);
         }
     };
+    match reader {
+        None => {}
+        Some(r) => {
+            child_cmd.stdin(r);
+        }
+    }
     match err_file {
         None => {}
         Some(f) => {
@@ -281,19 +319,7 @@ fn execute_command(args: &Vec<String>, out_file: Option<File>, err_file: Option<
         }
     };
 
-    let child_res = child_cmd.spawn();
-
-    match child_res {
-        Ok(mut child) => match child.wait() {
-            Ok(_) => {}
-            Err(e) => {
-                eprintln!("failed wait on child: {}", e);
-            }
-        },
-        Err(e) => {
-            eprintln!("shell: failed to execute {}: {}", &args[0], e)
-        }
-    }
+    Some(child_cmd.spawn())
 }
 
 fn into_path_str(full_path: PathBuf) -> String {
