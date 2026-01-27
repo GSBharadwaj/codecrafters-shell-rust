@@ -2,41 +2,23 @@ mod input_parser;
 mod models;
 mod readline_helper;
 mod trie;
+mod builtin;
+mod util;
 
-use models::ShellCmd;
-use std::fs::{File, OpenOptions};
-use std::io::{pipe, stdout, PipeReader, PipeWriter};
-use std::{env, fs};
-use std::collections::VecDeque;
+use crate::builtin::builtin::{execute_builtin, Builtin};
 use crate::readline_helper::ReadLineHelper;
-use rustyline::{CompletionType, Config};
+use crate::util::util::{get_all_executables, get_cmd_path};
+use models::ShellCmd;
 use rustyline::Editor;
-use std::io::{self, Write};
-use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
-use std::process::{exit, Child, Command};
+use rustyline::{CompletionType, Config};
+use std::collections::VecDeque;
+use std::fs::{File, OpenOptions};
+use std::io::{self};
+use std::io::{pipe, PipeReader, PipeWriter};
+use std::process::{Child, Command};
+use std::str::FromStr;
 
 const PROMPT: &'static str = "$ ";
-const TILDE: &'static str = "~";
-
-enum Builtin {
-    Exit,
-    Echo,
-    Type,
-    Pwd,
-    Cd,
-}
-
-fn get_builtin(cmd: &String) -> Option<Builtin> {
-    match cmd.as_str() {
-        "exit" => Some(Builtin::Exit),
-        "echo" => Some(Builtin::Echo),
-        "type" => Some(Builtin::Type),
-        "pwd" => Some(Builtin::Pwd),
-        "cd" => Some(Builtin::Cd),
-        _ => None,
-    }
-}
 
 fn main() -> rustyline::Result<()>{
     let builtin_commands = vec![
@@ -158,138 +140,18 @@ fn execute(args: &Vec<String>,
     if args.is_empty() {
         return None;
     }
-    let builtin_opt = get_builtin(&args[0]);
+
+    let builtin_opt = Builtin::from_str(&args[0]);
 
     match builtin_opt {
-        Some(x) => {
-            let mut output = get_write(out_file, writer);
-            let mut err_out = get_write(err_file, None);
-            match x {
-                Builtin::Exit => {execute_exit(0); None},
-                Builtin::Echo => {execute_echo(args, &mut output); None}
-                Builtin::Type => {execute_type(args, &mut output, &mut err_out); None}
-                Builtin::Pwd => {execute_pwd(&mut output); None}
-                Builtin::Cd => {execute_cd(args, &mut err_out); None}
-            }
+        Ok(x) => {
+            execute_builtin(x, args, out_file, err_file, reader, writer);
+            None
         }
-        None => match get_cmd_path(&args[0]) {
+        Err(()) => match get_cmd_path(&args[0]) {
             Some(_) => {spawn_command(&args, out_file, err_file, reader, writer)},
             None => {eprintln!("{}: command not found", args[0]); None}
         },
-    }
-}
-
-fn get_write(file: Option<File>, pipe: Option<PipeWriter>) -> Box<dyn Write> {
-    match file {
-        None => {
-            match pipe {
-                None => {Box::new(stdout())}
-                Some(p) => {Box::new(p)}
-            }
-        },
-        Some(f) => Box::new(f),
-    }
-}
-
-fn execute_cd(args: &Vec<String>, err_out: &mut Box<dyn Write>) {
-    if args.len() > 2 {
-        write_out_ln(err_out, "cd: too many arguments");
-        return;
-    }
-
-    let path = args.get(1).map(String::as_str).unwrap_or("~");
-
-    let tilde_replaced_path_res = tilde_replaced_path(path);
-    if tilde_replaced_path_res.is_none() {
-        write_out_ln(err_out, "No home directory set");
-        return;
-    }
-
-    let path = tilde_replaced_path_res.unwrap();
-    match path.as_path().canonicalize() {
-        Ok(path_buf) => {
-            let true_path = path_buf.as_path();
-            if !true_path.exists() {
-                write_out_ln(err_out, &format!("{}: {}: No such file or directory", args[0], args[1]))
-            } else if !true_path.is_dir() {
-                write_out_ln(err_out, &format!("{}: {}: Not a directory", args[0], args[1]))
-            } else {
-                let cd_result = env::set_current_dir(true_path);
-                match cd_result {
-                    Ok(_) => {}
-                    Err(_) => write_out_ln(err_out, &format!("{}: {}: No such file or directory", args[0], args[1])),
-                }
-            }
-        }
-        Err(_) => write_out_ln(err_out, &format!("cd: {}: No such file or directory", args[1])),
-    }
-}
-
-fn tilde_replaced_path(path_str: &str) -> Option<PathBuf> {
-    if path_str.contains(TILDE) {
-        return match env::home_dir() {
-            None => None,
-            Some(dir) => {
-                let paths = path_str.replace(TILDE, into_path_str(dir).as_str());
-                Some(Path::new(paths.as_str()).to_path_buf())
-            }
-        };
-    }
-    Some(Path::new(path_str).to_path_buf())
-}
-
-fn execute_exit(code: i32) {
-    exit(code)
-}
-
-fn execute_echo(args: &Vec<String>, output: &mut dyn Write) {
-    let n = args.len();
-    if n == 1 {
-        write_out_ln(output, "");
-        return;
-    }
-
-    for i in 1..(n - 1) {
-        write_out(output, &format!("{} ", args[i]))
-    }
-    write_out_ln(output, &format!("{}", args[n - 1]))
-}
-
-fn write_out(output: &mut dyn Write, text: &str) {
-    if let Err(e) = write!(output, "{}", text) {
-        eprintln!("Error writing output: {}", e);
-    }
-}
-
-fn write_out_ln(output: &mut dyn Write, text: &str) {
-    if let Err(e) = writeln!(output, "{}", text) {
-        eprintln!("Error writing output: {}", e);
-    }
-}
-
-fn execute_type(args: &Vec<String>, output: &mut dyn Write, err_out: &mut dyn Write) {
-    if args.len() < 2 {
-        return;
-    }
-
-    let builtin_opt = get_builtin(&args[1]);
-    match builtin_opt {
-        Some(_) => write_out_ln(output, &format!("{} is a shell builtin", &args[1])),
-        _ => match get_cmd_path(&args[1]) {
-            Some(full_path) => write_out_ln(
-                output,
-                &format!("{} is {}", &args[1], into_path_str(full_path)),
-            ),
-            None => write_out_ln(err_out, &format!("{}: not found", &args[1])),
-        },
-    }
-}
-
-fn execute_pwd(output: &mut dyn Write) {
-    let res = env::current_dir();
-    match res {
-        Ok(path) => write_out_ln(output, &format!("{}", &into_path_str(path))),
-        Err(_) => {}
     }
 }
 
@@ -325,51 +187,4 @@ fn spawn_command(args: &Vec<String>,
     };
 
     Some(child_cmd.spawn())
-}
-
-fn into_path_str(full_path: PathBuf) -> String {
-    full_path.into_os_string().into_string().unwrap()
-}
-
-fn get_cmd_path(cmd: &str) -> Option<PathBuf> {
-    let paths = env::var_os("PATH")?;
-    for dir in env::split_paths(&paths) {
-        let full_path = dir.as_path().join(cmd);
-        if is_executable(&full_path) {
-            return Some(full_path);
-        }
-    }
-    None
-}
-
-fn get_all_executables() -> Vec<String> {
-    let paths;
-    match env::var_os("PATH") {
-        None => {return Vec::new()}
-        Some(x) => {paths = x}
-    }
-
-    let mut res = Vec::new();
-
-    for dir in env::split_paths(&paths) {
-        if !dir.is_dir() {
-            continue
-        }
-        let entries = fs::read_dir(dir).unwrap();
-        for entry in entries {
-            let entry = entry.unwrap().path();
-            if entry.is_file() && is_executable(&entry) {
-                res.push(entry.file_name().unwrap().to_str().unwrap().to_string());
-            }
-        }
-    }
-
-    res
-}
-
-fn is_executable(path_buf: &PathBuf) -> bool {
-    match path_buf.metadata() {
-        Ok(metadata) => metadata.is_file() && metadata.permissions().mode() & 0o111 != 0,
-        Err(_) => false,
-    }
 }
