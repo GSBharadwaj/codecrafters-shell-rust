@@ -1,8 +1,9 @@
 pub mod builtin {
     use crate::readline_helper::ReadLineHelper;
     use crate::util::util::{get_cmd_path, into_path_str, TILDE};
-    use rustyline::history::{DefaultHistory, History};
+    use rustyline::history::{DefaultHistory, History, SearchDirection};
     use rustyline::Editor;
+    use std::borrow::Cow;
     use std::env;
     use std::fs::File;
     use std::io::{stdout, PipeReader, PipeWriter, Write};
@@ -50,20 +51,49 @@ pub mod builtin {
             Builtin::Type => execute_type(args, &mut out, &mut err_out),
             Builtin::Pwd => execute_pwd(&mut out),
             Builtin::Cd => execute_cd(args, &mut err_out),
-            Builtin::History => execute_history(args, rl, &mut out),
+            Builtin::History => execute_history(args, rl, &mut out, &mut err_out),
         }
     }
 
-    fn execute_history(_: &Vec<String>, rl: &Editor<ReadLineHelper, DefaultHistory>, out: &mut Box<dyn Write>) {
+    fn execute_history(args: &Vec<String>,
+                       rl: &Editor<ReadLineHelper, DefaultHistory>,
+                       out: &mut Box<dyn Write>,
+                       err_out: &mut Box<dyn Write>) {
+        if args.len() > 2 {
+            write_out_ln(err_out, "shell: history: too many arguments");
+            return;
+        }
+
+        let limit =
+            match args.get(1) {
+                Some(arg) => {
+                    match arg.parse::<usize>() {
+                        Ok(i) => { i }
+                        Err(_) => {
+                            write_out_ln(err_out, &format!("shell: history: {arg}: numeric argument required"));
+                            return;
+                        }
+                    }
+                }
+                None => {
+                    rl.history().len()
+                }
+            };
+
         let history = rl.history();
 
-        let mut i = 1;
+        let mut i = history.len() - limit;
         let places = if history.len() > 1000 { 5 } else { 4 };
 
-        for cmd in history.iter() {
-            let text = &format!("{i:places$} {cmd}", places = places);
+        while i < history.len() {
+            if let Ok(search_res) = history.get(i, SearchDirection::Forward) {
+                if let Some(res) = search_res {
+                    let cmd = Cow::into_owned(res.entry);
+                    let text = &format!("{:places$} {cmd}", i + 1, places = places);
+                    write_out_ln(out, text);
+                }
+            }
             i += 1;
-            write_out_ln(out, text);
         }
     }
 
