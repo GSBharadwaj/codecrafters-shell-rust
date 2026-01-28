@@ -1,5 +1,8 @@
 pub mod builtin {
+    use crate::readline_helper::ReadLineHelper;
     use crate::util::util::{get_cmd_path, into_path_str, TILDE};
+    use rustyline::history::{DefaultHistory, History};
+    use rustyline::Editor;
     use std::env;
     use std::fs::File;
     use std::io::{stdout, PipeReader, PipeWriter, Write};
@@ -13,6 +16,7 @@ pub mod builtin {
         Type,
         Pwd,
         Cd,
+        History,
     }
 
     impl FromStr for Builtin {
@@ -25,6 +29,7 @@ pub mod builtin {
                 "type" => Ok(Builtin::Type),
                 "pwd" => Ok(Builtin::Pwd),
                 "cd" => Ok(Builtin::Cd),
+                "history" => Ok(Builtin::History),
                 _ => Err(()),
             }
         }
@@ -34,16 +39,31 @@ pub mod builtin {
                            args: &Vec<String>,
                            out_file: Option<File>,
                            err_file: Option<File>,
+                           rl: &Editor<ReadLineHelper, DefaultHistory>,
                            _: Option<PipeReader>,
                            writer: Option<PipeWriter>) {
         let mut out = get_write(out_file, writer);
         let mut err_out = get_write(err_file, None);
         match builtin {
-            Builtin::Exit => {execute_exit(0)}
-            Builtin::Echo => {execute_echo(args, &mut err_out)}
-            Builtin::Type => {execute_type(args, &mut out, &mut err_out)}
-            Builtin::Pwd => {execute_pwd(&mut out)}
-            Builtin::Cd => {execute_cd(args, &mut err_out)}
+            Builtin::Exit => execute_exit(0),
+            Builtin::Echo => execute_echo(args, &mut out),
+            Builtin::Type => execute_type(args, &mut out, &mut err_out),
+            Builtin::Pwd => execute_pwd(&mut out),
+            Builtin::Cd => execute_cd(args, &mut err_out),
+            Builtin::History => execute_history(args, rl, &mut out),
+        }
+    }
+
+    fn execute_history(_: &Vec<String>, rl: &Editor<ReadLineHelper, DefaultHistory>, out: &mut Box<dyn Write>) {
+        let history = rl.history();
+
+        let mut i = 1;
+        let places = if history.len() > 1000 { 5 } else { 4 };
+
+        for cmd in history.iter() {
+            let text = &format!("{i:places$} {cmd}", places = places);
+            i += 1;
+            write_out_ln(out, text);
         }
     }
 
