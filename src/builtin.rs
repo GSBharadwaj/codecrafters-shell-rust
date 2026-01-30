@@ -5,8 +5,8 @@ pub mod builtin {
     use rustyline::Editor;
     use std::borrow::Cow;
     use std::env;
-    use std::fs::File;
-    use std::io::{stdout, PipeReader, PipeWriter, Write};
+    use std::fs::{File, OpenOptions};
+    use std::io::{stdout, BufWriter, PipeReader, PipeWriter, Write};
     use std::path::{Path, PathBuf};
     use std::process::exit;
     use std::str::FromStr;
@@ -36,13 +36,15 @@ pub mod builtin {
         }
     }
 
-    pub fn execute_builtin(builtin: Builtin,
-                           args: &Vec<String>,
-                           out_file: Option<File>,
-                           err_file: Option<File>,
-                           rl: &mut Editor<ReadLineHelper, DefaultHistory>,
-                           _: Option<PipeReader>,
-                           writer: Option<PipeWriter>) {
+    pub fn execute_builtin(
+        builtin: Builtin,
+        args: &Vec<String>,
+        out_file: Option<File>,
+        err_file: Option<File>,
+        rl: &mut Editor<ReadLineHelper, DefaultHistory>,
+        _: Option<PipeReader>,
+        writer: Option<PipeWriter>,
+    ) {
         let mut out = get_write(out_file, writer);
         let mut err_out = get_write(err_file, None);
         match builtin {
@@ -55,15 +57,16 @@ pub mod builtin {
         }
     }
 
-    fn execute_history(args: &Vec<String>,
-                       rl: &mut Editor<ReadLineHelper, DefaultHistory>,
-                       out: &mut Box<dyn Write>,
-                       err_out: &mut Box<dyn Write>) {
+    fn execute_history(
+        args: &Vec<String>,
+        rl: &mut Editor<ReadLineHelper, DefaultHistory>,
+        out: &mut Box<dyn Write>,
+        err_out: &mut Box<dyn Write>,
+    ) {
         if args.len() > 3 {
             write_out_ln(err_out, "shell: history: too many arguments");
             return;
         }
-
 
         if let Some(arg) = args.get(1) {
             match arg.as_str() {
@@ -71,24 +74,50 @@ pub mod builtin {
                     if let Some(path) = args.get(2) {
                         let _ = rl.load_history(path);
                     }
-                },
-                _ => {
-                    match arg.parse::<usize>() {
-                        Ok(i) => { print_history(rl, out, i) }
-                        Err(_) => {
-                            write_out_ln(err_out, &format!("shell: history: {arg}: numeric argument required"));
-                            return;
-                        }
+                }
+                "-w" => {
+                    if let Some(path) = args.get(2) {
+                        if let Err(e) = write_history(rl, path.as_str(), false) {
+                            write_out_ln(err_out,
+                                         &format!("shell: history: {path}: {}", e))
+                        };
                     }
                 }
+                _ => match arg.parse::<usize>() {
+                    Ok(i) => print_history(rl, out, i),
+                    Err(_) => {
+                        write_out_ln(
+                            err_out,
+                            &format!("shell: history: {arg}: numeric argument required"),
+                        );
+                        return;
+                    }
+                },
             }
         } else {
             print_history(rl, out, rl.history().len())
         };
-
     }
 
-    fn print_history(rl: &Editor<ReadLineHelper, DefaultHistory>, out: &mut Box<dyn Write>, limit: usize) {
+    fn write_history(
+        rl: &mut Editor<ReadLineHelper, DefaultHistory>,
+        p1: &str,
+        append: bool,
+    ) -> std::io::Result<()> {
+        let file = OpenOptions::new().create(true).write(true).append(append).open(p1)?;
+
+        let mut writer = BufWriter::new(file);
+        for entry in rl.history().iter() {
+            writeln!(writer, "{}", entry.as_str())?
+        }
+        Ok(())
+    }
+
+    fn print_history(
+        rl: &Editor<ReadLineHelper, DefaultHistory>,
+        out: &mut Box<dyn Write>,
+        limit: usize,
+    ) {
         let history = rl.history();
 
         let mut i = history.len() - limit;
@@ -219,7 +248,6 @@ pub mod builtin {
             eprintln!("Error writing output: {}", e);
         }
     }
-
 
     fn get_write(file: Option<File>, pipe: Option<PipeWriter>) -> Box<dyn Write> {
         match file {
