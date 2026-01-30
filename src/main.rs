@@ -6,6 +6,7 @@ mod builtin;
 mod util;
 
 use crate::builtin::builtin::{execute_builtin, Builtin};
+use crate::models::ShellMetadata;
 use crate::readline_helper::ReadLineHelper;
 use crate::util::util::{get_all_executables, get_cmd_path};
 use models::ShellCmd;
@@ -17,7 +18,6 @@ use std::io::{self};
 use std::io::{pipe, PipeReader, PipeWriter};
 use std::process::{Child, Command};
 use std::str::FromStr;
-use rustyline::history::DefaultHistory;
 
 const PROMPT: &'static str = "$ ";
 
@@ -36,19 +36,20 @@ fn main() -> rustyline::Result<()>{
         .completion_type(CompletionType::List)
         .history_ignore_space(false)
         .build();
-    let mut rl = Editor::with_config(config)?;
-    rl.set_helper(Some(readline_helper));
+    let mut editor = Editor::with_config(config)?;
+    editor.set_helper(Some(readline_helper));
 
+    let mut meta = ShellMetadata::from(editor);
 
     loop {
-        let rl_input = rl.readline(PROMPT);
+        let rl_input = meta.rl.readline(PROMPT);
         let input = match rl_input {
             Ok(line) => { line }
             Err(r) => { return Err(r) }
         };
 
         let cmd_res = get_cmd_args(input.as_str());
-        let _ = rl.add_history_entry(input);
+        let _ = meta.rl.add_history_entry(input);
 
         if cmd_res.is_err() {
             eprintln!("{}", cmd_res.err().unwrap());
@@ -93,7 +94,7 @@ fn main() -> rustyline::Result<()>{
                 },
             };
 
-            if let Some(child) = execute(&cmd.args, output_file, error_file, &mut rl, reader, writer) {
+            if let Some(child) = execute(&cmd.args, output_file, error_file, &mut meta, reader, writer) {
                 child_processes.push((i, child))
             }
         }
@@ -137,7 +138,7 @@ fn get_cmd_args(input: &str) -> Result<Vec<ShellCmd>, String> {
 fn execute(args: &Vec<String>,
            out_file: Option<File>,
            err_file: Option<File>,
-           rl: &mut Editor<ReadLineHelper, DefaultHistory>,
+           rl: &mut ShellMetadata,
            reader: Option<PipeReader>,
            writer: Option<PipeWriter> ) -> Option<io::Result<Child>> {
     if args.is_empty() {

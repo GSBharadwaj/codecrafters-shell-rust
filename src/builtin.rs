@@ -10,6 +10,7 @@ pub mod builtin {
     use std::path::{Path, PathBuf};
     use std::process::exit;
     use std::str::FromStr;
+    use crate::models::ShellMetadata;
 
     pub enum Builtin {
         Exit,
@@ -41,7 +42,7 @@ pub mod builtin {
         args: &Vec<String>,
         out_file: Option<File>,
         err_file: Option<File>,
-        rl: &mut Editor<ReadLineHelper, DefaultHistory>,
+        meta: &mut ShellMetadata,
         _: Option<PipeReader>,
         writer: Option<PipeWriter>,
     ) {
@@ -53,13 +54,13 @@ pub mod builtin {
             Builtin::Type => execute_type(args, &mut out, &mut err_out),
             Builtin::Pwd => execute_pwd(&mut out),
             Builtin::Cd => execute_cd(args, &mut err_out),
-            Builtin::History => execute_history(args, rl, &mut out, &mut err_out),
+            Builtin::History => execute_history(args, meta, &mut out, &mut err_out),
         }
     }
 
     fn execute_history(
         args: &Vec<String>,
-        rl: &mut Editor<ReadLineHelper, DefaultHistory>,
+        meta: &mut ShellMetadata,
         out: &mut Box<dyn Write>,
         err_out: &mut Box<dyn Write>,
     ) {
@@ -72,19 +73,27 @@ pub mod builtin {
             match arg.as_str() {
                 "-r" => {
                     if let Some(path) = args.get(2) {
-                        let _ = rl.load_history(path);
+                        let _ = meta.rl.load_history(path);
                     }
                 }
                 "-w" => {
                     if let Some(path) = args.get(2) {
-                        if let Err(e) = write_history(rl, path.as_str(), false) {
+                        if let Err(e) = write_history(meta, path.as_str()) {
+                            write_out_ln(err_out,
+                                         &format!("shell: history: {path}: {}", e))
+                        };
+                    }
+                }
+                "-a" => {
+                    if let Some(path) = args.get(2) {
+                        if let Err(e) = append_history(meta, path.as_str()) {
                             write_out_ln(err_out,
                                          &format!("shell: history: {path}: {}", e))
                         };
                     }
                 }
                 _ => match arg.parse::<usize>() {
-                    Ok(i) => print_history(rl, out, i),
+                    Ok(i) => print_history(&meta.rl, out, i),
                     Err(_) => {
                         write_out_ln(
                             err_out,
@@ -95,21 +104,34 @@ pub mod builtin {
                 },
             }
         } else {
-            print_history(rl, out, rl.history().len())
+            print_history(&meta.rl, out, meta.rl.history().len())
         };
     }
 
     fn write_history(
-        rl: &mut Editor<ReadLineHelper, DefaultHistory>,
+        meta: &mut ShellMetadata,
         p1: &str,
-        append: bool,
     ) -> std::io::Result<()> {
-        let file = OpenOptions::new().create(true).write(true).append(append).open(p1)?;
+        let file = OpenOptions::new().create(true).write(true).open(p1)?;
 
         let mut writer = BufWriter::new(file);
-        for entry in rl.history().iter() {
+        for entry in meta.rl.history().iter() {
             writeln!(writer, "{}", entry.as_str())?
         }
+        Ok(())
+    }
+
+    fn append_history(
+        meta: &mut ShellMetadata,
+        p1: &str,
+    ) -> std::io::Result<()> {
+        let file = OpenOptions::new().create(true).append(true).open(p1)?;
+
+        let mut writer = BufWriter::new(file);
+        for entry in meta.iter_from_save_point() {
+            writeln!(writer, "{}", entry.as_str())?
+        }
+        meta.update_save_point();
         Ok(())
     }
 
