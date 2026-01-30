@@ -40,7 +40,7 @@ pub mod builtin {
                            args: &Vec<String>,
                            out_file: Option<File>,
                            err_file: Option<File>,
-                           rl: &Editor<ReadLineHelper, DefaultHistory>,
+                           rl: &mut Editor<ReadLineHelper, DefaultHistory>,
                            _: Option<PipeReader>,
                            writer: Option<PipeWriter>) {
         let mut out = get_write(out_file, writer);
@@ -56,30 +56,39 @@ pub mod builtin {
     }
 
     fn execute_history(args: &Vec<String>,
-                       rl: &Editor<ReadLineHelper, DefaultHistory>,
+                       rl: &mut Editor<ReadLineHelper, DefaultHistory>,
                        out: &mut Box<dyn Write>,
                        err_out: &mut Box<dyn Write>) {
-        if args.len() > 2 {
+        if args.len() > 3 {
             write_out_ln(err_out, "shell: history: too many arguments");
             return;
         }
 
-        let limit =
-            match args.get(1) {
-                Some(arg) => {
+
+        if let Some(arg) = args.get(1) {
+            match arg.as_str() {
+                "-r" => {
+                    if let Some(path) = args.get(2) {
+                        let _ = rl.load_history(path);
+                    }
+                },
+                _ => {
                     match arg.parse::<usize>() {
-                        Ok(i) => { i }
+                        Ok(i) => { print_history(rl, out, i) }
                         Err(_) => {
                             write_out_ln(err_out, &format!("shell: history: {arg}: numeric argument required"));
                             return;
                         }
                     }
                 }
-                None => {
-                    rl.history().len()
-                }
-            };
+            }
+        } else {
+            print_history(rl, out, rl.history().len())
+        };
 
+    }
+
+    fn print_history(rl: &Editor<ReadLineHelper, DefaultHistory>, out: &mut Box<dyn Write>, limit: usize) {
         let history = rl.history();
 
         let mut i = history.len() - limit;

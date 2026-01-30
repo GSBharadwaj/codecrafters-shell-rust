@@ -93,7 +93,7 @@ fn main() -> rustyline::Result<()>{
                 },
             };
 
-            if let Some(child) = execute(&cmd.args, output_file, error_file, &rl, reader, writer) {
+            if let Some(child) = execute(&cmd.args, output_file, error_file, &mut rl, reader, writer) {
                 child_processes.push((i, child))
             }
         }
@@ -137,7 +137,7 @@ fn get_cmd_args(input: &str) -> Result<Vec<ShellCmd>, String> {
 fn execute(args: &Vec<String>,
            out_file: Option<File>,
            err_file: Option<File>,
-           rl: &Editor<ReadLineHelper, DefaultHistory>,
+           rl: &mut Editor<ReadLineHelper, DefaultHistory>,
            reader: Option<PipeReader>,
            writer: Option<PipeWriter> ) -> Option<io::Result<Child>> {
     if args.is_empty() {
