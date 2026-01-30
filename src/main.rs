@@ -13,6 +13,7 @@ use models::ShellCmd;
 use rustyline::Editor;
 use rustyline::{CompletionType, Config};
 use std::collections::VecDeque;
+use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::{self};
 use std::io::{pipe, PipeReader, PipeWriter};
@@ -38,6 +39,9 @@ fn main() -> rustyline::Result<()>{
         .build();
     let mut editor = Editor::with_config(config)?;
     editor.set_helper(Some(readline_helper));
+    if let Some(hist_file_path) = env::var_os("HISTFILE") {
+        let _ = editor.load_history(&hist_file_path);
+    }
 
     let mut meta = ShellMetadata::from(editor);
 
