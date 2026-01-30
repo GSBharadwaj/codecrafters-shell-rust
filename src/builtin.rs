@@ -49,7 +49,7 @@ pub mod builtin {
         let mut out = get_write(out_file, writer);
         let mut err_out = get_write(err_file, None);
         match builtin {
-            Builtin::Exit => execute_exit(0),
+            Builtin::Exit => execute_exit(meta, 0),
             Builtin::Echo => execute_echo(args, &mut out),
             Builtin::Type => execute_type(args, &mut out, &mut err_out),
             Builtin::Pwd => execute_pwd(&mut out),
@@ -216,7 +216,12 @@ pub mod builtin {
         Some(Path::new(path_str).to_path_buf())
     }
 
-    fn execute_exit(code: i32) {
+    fn execute_exit(meta: &mut ShellMetadata, code: i32) {
+        if let Some(histfile_path) = env::var_os("HISTFILE") {
+            if let Some(path) = histfile_path.to_str() {
+                let _ = append_history(meta, path);
+            }
+        }
         exit(code)
     }
 
