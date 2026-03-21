@@ -11,27 +11,32 @@ enum State {
 }
 
 #[derive(PartialEq)]
-enum Token {
+pub enum Token {
     Redir(/*append?*/ bool),
     RedirErr(/*append?*/ bool),
     Pipe,
-    Str(String),
+    Str((usize, String)),
 }
 
 pub fn parse(input: &str) -> Result<Vec<ShellCmd>, String> {
-    let mut char_peek = input.chars().peekable();
+    let tokens = tokenize(input);
+    parse_tokens(&tokens)
+}
+
+pub fn tokenize(input: &str) -> Vec<Token> {
+    let mut char_peek = input.chars().enumerate().peekable();
 
     let mut state: State = Default;
     let mut tokens = Vec::new();
     let mut token_buffer = String::new();
     let mut state_stack: VecDeque<State> = VecDeque::new();
 
-    while let Some(x) = char_peek.next() {
+    while let Some((idx, x)) = char_peek.next() {
         match state {
             Default => {
                 if x.is_whitespace() {
                     if !token_buffer.is_empty() {
-                        tokens.push(Str(token_buffer.to_owned()));
+                        tokens.push(Str((idx, token_buffer.to_owned())));
                         token_buffer.clear();
                     }
                 } else if is_single_quote(&x) {
@@ -41,8 +46,8 @@ pub fn parse(input: &str) -> Result<Vec<ShellCmd>, String> {
                 } else if is_backslash(&x) {
                     state = Escape;
                 } else if x == '>' {
-                    match char_peek.peek() {
-                        Some('>') => {
+                    match (char_peek).peek() {
+                        Some((_, '>')) => {
                             char_peek.next();
                             tokens.push(Redir(true))
                         }
@@ -50,15 +55,15 @@ pub fn parse(input: &str) -> Result<Vec<ShellCmd>, String> {
                     }
                 } else if x == '1' {
                     match char_peek.peek() {
-                        Some('>') => { continue },
+                        Some((_, '>')) => { continue },
                         _ => { token_buffer.push(x) }
                     }
                 } else if x == '2' {
                     match char_peek.peek() {
-                        Some('>') => {
+                        Some((_, '>')) => {
                             char_peek.next();
                             match char_peek.peek() {
-                                Some('>') => {
+                                Some((_,'>')) => {
                                     char_peek.next();
                                     tokens.push(RedirErr(true))
                                 }
@@ -74,7 +79,7 @@ pub fn parse(input: &str) -> Result<Vec<ShellCmd>, String> {
                     }
                 } else if x == '|' {
                     if !token_buffer.is_empty() {
-                        tokens.push(Str(token_buffer.to_owned()));
+                        tokens.push(Str((idx, token_buffer.to_owned())));
                         token_buffer.clear();
                     }
                     tokens.push(Pipe)
@@ -94,12 +99,12 @@ pub fn parse(input: &str) -> Result<Vec<ShellCmd>, String> {
                     state = Default
                 } else if is_backslash(&x) {
                     match char_peek.peek() {
-                        Some('\\') |
-                        Some('"') => {
+                        Some((_, '\\')) |
+                        Some((_ ,'"')) => {
                             state = Escape;
                             state_stack.push_back(DoubleQuote);
                         }
-                        _ => token_buffer.push(x)//treat it as literal
+                        _ => token_buffer.push(x) //treat it as literal
                     }
                 } else {
                     token_buffer.push(x);
@@ -111,13 +116,12 @@ pub fn parse(input: &str) -> Result<Vec<ShellCmd>, String> {
             }
         }
     }
-    let last_string = token_buffer.as_str().trim();
+    let last_string = token_buffer.as_str();
     if !last_string.is_empty() {
-        tokens.push(Str(last_string.to_string()));
+        tokens.push(Str((input.len()-1, last_string.to_string())));
         token_buffer.clear()
     }
-
-    parse_tokens(&tokens)
+    tokens
 }
 
 fn is_single_quote(x: &char) -> bool {
@@ -133,7 +137,7 @@ fn is_double_quote(x: &char) -> bool {
 }
 
 
-fn parse_tokens(tokens: &Vec<Token>) -> Result<Vec<ShellCmd>, String> {
+pub fn parse_tokens(tokens: &Vec<Token>) -> Result<Vec<ShellCmd>, String> {
     let mut args = Vec::new();
     let mut cmds = Vec::new();
 
@@ -147,7 +151,7 @@ fn parse_tokens(tokens: &Vec<Token>) -> Result<Vec<ShellCmd>, String> {
         match token {
             RedirErr (append)=> {
                 match token_iter.next() {
-                    Some(Str(x)) => {
+                    Some(Str((_, x))) => {
                         err_redirection_path = Some(x.to_owned());
                         err_redirection_append = *append;
                     },
@@ -159,7 +163,7 @@ fn parse_tokens(tokens: &Vec<Token>) -> Result<Vec<ShellCmd>, String> {
             }
             Redir(append) => {
                 match token_iter.next() {
-                    Some(Str(x)) => {
+                    Some(Str((_, x))) => {
                         redirection_path = Some(x.to_owned());
                         redirection_append = *append;
                     },
@@ -170,7 +174,7 @@ fn parse_tokens(tokens: &Vec<Token>) -> Result<Vec<ShellCmd>, String> {
                 }
                 //Some fancy rust to skip whitespaces
             }
-            Str(token) => {
+            Str((_, token)) => {
                 args.push(token.to_string());
             }
             Pipe => {

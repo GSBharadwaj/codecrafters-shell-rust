@@ -2,7 +2,7 @@ pub mod util {
     use std::{env, fs};
     use std::os::unix::fs::PermissionsExt;
     use std::path::PathBuf;
-    
+
     pub const TILDE: &'static str = "~";
 
     pub fn get_cmd_path(cmd: &str) -> Option<PathBuf> {
@@ -14,6 +14,21 @@ pub mod util {
             }
         }
         None
+    }
+
+    pub fn get_all_files(dir: &str) -> Vec<String> {
+        let directory_to_search = PathBuf::from(dir);
+        if !directory_to_search.is_dir() {
+            return vec![]
+        }
+        let mut res = Vec::new();
+        for entry in fs::read_dir(directory_to_search).unwrap() {
+            let entry = entry.unwrap();
+            if entry.path().is_file() {
+                res.push(entry.file_name().to_str().unwrap().to_string());
+            }
+        }
+        res
     }
 
     pub fn get_all_executables() -> Vec<String> {
@@ -31,9 +46,9 @@ pub mod util {
             }
             let entries = fs::read_dir(dir).unwrap();
             for entry in entries {
-                let entry = entry.unwrap().path();
-                if entry.is_file() && is_executable(&entry) {
-                    res.push(entry.file_name().unwrap().to_str().unwrap().to_string());
+                let entry = entry.unwrap();
+                if entry.path().is_file() && is_executable(&entry.path()) {
+                    res.push(entry.file_name().to_str().unwrap().to_string());
                 }
             }
         }

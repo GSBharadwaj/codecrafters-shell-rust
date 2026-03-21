@@ -8,7 +8,7 @@ mod util;
 use crate::builtin::builtin::{execute_builtin, Builtin};
 use crate::models::ShellMetadata;
 use crate::readline_helper::ReadLineHelper;
-use crate::util::util::{get_all_executables, get_cmd_path};
+use crate::util::util::{get_all_executables, get_all_files, get_cmd_path};
 use models::ShellCmd;
 use rustyline::Editor;
 use rustyline::{CompletionType, Config};
@@ -31,7 +31,7 @@ fn main() -> rustyline::Result<()>{
     let mut all_commands = get_all_executables();
     all_commands.extend(builtin_commands);
 
-    let readline_helper = ReadLineHelper::new(all_commands);
+    let readline_helper = ReadLineHelper::new(all_commands, get_all_files);
 
     let config = Config::builder()
         .completion_type(CompletionType::List)
@@ -47,7 +47,7 @@ fn main() -> rustyline::Result<()>{
 
     loop {
         let rl_input = meta.rl.readline(PROMPT);
-        let input = match rl_input {
+        let input: String = match rl_input {
             Ok(line) => { line }
             Err(r) => { return Err(r) }
         };
