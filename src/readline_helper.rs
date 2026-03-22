@@ -1,5 +1,5 @@
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use rustyline::completion::Completer;
 use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
@@ -22,6 +22,33 @@ impl ReadLineHelper {
         Self {
             command_trie: Trie::new(commands),
             cur_dir_lister: Box::new(cur_dir_lister),
+        }
+    }
+
+    fn get_dir_to_search(parent: &str) -> PathBuf {
+        if parent.is_empty() {
+            env::current_dir().unwrap()
+        } else if parent.starts_with("/") {
+            PathBuf::from(parent)
+        } else {
+            let mut dir = env::current_dir().unwrap();
+            dir.push(parent);
+            PathBuf::from(parent)
+        }
+    }
+
+    fn split_path_prefix(last_arg: &String) -> (String, String) {
+        let path: &Path = Path::new(last_arg);
+        if path.is_dir() {
+            return (path.to_str().unwrap().to_owned(), "".to_owned())
+        }
+        let parent = path.parent();
+        let base = path.file_name();
+        match (parent, base) {
+            (Some(x), Some(y)) => {
+                (x.to_str().unwrap().to_string(), y.to_str().unwrap().to_string())
+            },
+            _ => ("".to_owned(), last_arg.to_owned())
         }
     }
 }
@@ -47,23 +74,18 @@ impl Completer for ReadLineHelper {
         } else if tokens.len() >= 2 {
             match &tokens[..] {
                 [_prefix @ .., Str((x, _)), Str((_, last_arg))] => {
-                    let directory_to_search =
-                    if last_arg.starts_with("/") || last_arg.starts_with("~./") {
-                        let prefix_path = PathBuf::from(last_arg);
-                        if let Some(parent) = prefix_path.parent() {
-                            parent.to_path_buf()
-                        } else {
-                            return Ok((x.to_owned(), vec![]))
-                        }
-                    } else {
-                        env::current_dir()?
-                    };
+                    let (parent, base) = Self::split_path_prefix(last_arg);
+                    let directory_to_search = Self::get_dir_to_search(&parent);
                     let list_of_files = (self.cur_dir_lister)(directory_to_search.to_str().unwrap());
                     let temp_trie = Trie::new(list_of_files);
-                    let matches = temp_trie.prefix_search(last_arg.as_ref());
+                    let matches = temp_trie.prefix_search(base.as_ref());
 
                     if matches.len() == 1 {
-                        return Ok((x.to_owned() + 1, vec![format!("{} ", &matches[0])]));
+                        return if parent.is_empty() || parent.ends_with( "/") {
+                            Ok((x.to_owned() + 1, vec![format!("{} ", parent + &matches[0])]))
+                        } else {
+                            Ok((x.to_owned() + 1, vec![format!("{} ", parent + "/" + &matches[0])]))
+                        }
                     }
 
                     Ok((x.to_owned() + 1, matches))

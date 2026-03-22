@@ -24,9 +24,7 @@ pub mod util {
         let mut res = Vec::new();
         for entry in fs::read_dir(directory_to_search).unwrap() {
             let entry = entry.unwrap();
-            if entry.path().is_file() {
-                res.push(entry.file_name().to_str().unwrap().to_string());
-            }
+            res.push(entry.file_name().to_str().unwrap().to_string());
         }
         res
     }
