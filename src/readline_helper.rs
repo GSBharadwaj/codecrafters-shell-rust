@@ -81,11 +81,10 @@ impl Completer for ReadLineHelper {
                     let matches = temp_trie.prefix_search(base.as_ref());
 
                     if matches.len() == 1 {
-                        return if parent.is_empty() || parent.ends_with( "/") {
-                            Ok((x.to_owned() + 1, vec![format!("{} ", parent + &matches[0])]))
-                        } else {
-                            Ok((x.to_owned() + 1, vec![format!("{} ", parent + "/" + &matches[0])]))
-                        }
+                        let mut completed_path = PathBuf::from(parent);
+                        completed_path.push(&matches[0]);
+                        let suffix = if completed_path.is_dir() { "/" } else { " " };
+                        return Ok((x.to_owned() + 1, vec![format!("{}{}", completed_path.display(), suffix)]));
                     }
 
                     Ok((x.to_owned() + 1, matches))
