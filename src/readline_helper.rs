@@ -1,5 +1,5 @@
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::{PathBuf};
 use rustyline::completion::Completer;
 use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
@@ -27,27 +27,21 @@ impl ReadLineHelper {
 
     fn get_dir_to_search(parent: &str) -> PathBuf {
         if parent.is_empty() {
-            env::current_dir().unwrap()
-        } else if parent.starts_with("/") {
-            PathBuf::from(parent)
-        } else {
-            let mut dir = env::current_dir().unwrap();
-            dir.push(parent);
-            PathBuf::from(parent)
+            return env::current_dir().unwrap()
         }
+        PathBuf::from(parent)
+
     }
 
     fn split_path_prefix(last_arg: &String) -> (String, String) {
-        let path: &Path = Path::new(last_arg);
-        if path.is_dir() {
-            return (path.to_str().unwrap().to_owned(), "".to_owned())
-        }
-        let parent = path.parent();
-        let base = path.file_name();
-        match (parent, base) {
-            (Some(x), Some(y)) => {
-                (x.to_str().unwrap().to_string(), y.to_str().unwrap().to_string())
+        let split  = last_arg.rsplit_once("/");
+        match split {
+            Some(("", filename)) => {
+                ("/".to_owned(), filename.to_owned())
             },
+            Some((dir, filename)) => {
+                (dir.to_owned(), filename.to_owned())
+            }
             _ => ("".to_owned(), last_arg.to_owned())
         }
     }
@@ -57,18 +51,27 @@ impl ReadLineHelper {
         let temp_trie = Trie::new(list_of_files);
         let matches = temp_trie.prefix_search(base.as_ref());
 
+        let mut full_path = PathBuf::from(&directory_to_search);
+        let mut completed_path = PathBuf::from(&parent);
         if matches.len() == 1 {
-            let mut completed_path = PathBuf::from(parent);
+            full_path.push(&matches[0]);
             completed_path.push(&matches[0]);
 
-            let mut full_path = PathBuf::from(directory_to_search);
-            full_path.push(&matches[0]);
-
-            let suffix = if completed_path.is_dir() || full_path.is_dir() { "/" } else { " " };
+            let suffix = if full_path.is_dir() { "/" } else { " " };
             let completion = format!("{}{}", completed_path.display(), suffix);
             vec![completion]
         } else {
-            matches
+            let mut res = Vec::new();
+            for matching in matches {
+                let mut full_path_match = PathBuf::from(&directory_to_search);
+                full_path_match.push(&matching);
+                if full_path_match.is_dir() {  //TODO: Check if we should reduce calls?
+                    res.push(format!("{}{}", matching, "/"))
+                } else {
+                    res.push(matching)
+                }
+            }
+            res
         }
     }
 }
