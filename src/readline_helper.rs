@@ -95,16 +95,18 @@ impl Completer for ReadLineHelper {
             }
 
             Ok((0, matches))
-        } else if (tokens.len() == 1 && input.ends_with(|c: char| c.is_whitespace()))
-                || tokens.len() >= 2 {
-
-            match &tokens[..] {
-                [Str((x, _))] => {
+        } else if tokens.len() >= 1 && input.ends_with(|c: char| c.is_whitespace()) {
+            match tokens.last() {
+                Some(Str((x, _))) => {
                     let cur_dir = env::current_dir()?.to_owned();
                     let matches = self.get_completion("".to_owned(), "".to_owned(), cur_dir);
 
                     Ok((x.to_owned() + 1, matches))
                 },
+                _ => Ok((0, Vec::new()))
+            }
+        } else if tokens.len() >= 2 {
+            match &tokens[..] {
                 [_prefix @ .., Str((x, _)), Str((_, last_arg))] => {
                     let (parent, base) = Self::split_path_prefix(last_arg);
                     let directory_to_search = Self::get_dir_to_search(&parent);
