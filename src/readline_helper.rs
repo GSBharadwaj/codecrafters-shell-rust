@@ -71,6 +71,7 @@ impl ReadLineHelper {
                     res.push(matching)
                 }
             }
+            res.sort();
             res
         }
     }
